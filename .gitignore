@@ -1,0 +1,196 @@
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.env
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.Python
+.python-version
+
+# Distribution / packaging
+build/
+dist/
+eggs/
+*.egg-info/
+.installed.cfg
+pip-wheel-metadata/
+wheels/
+*.egg
+
+# Testing / coverage
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.pytest_cache/
+nose2-junit.xml
+.coveragerc
+hypothesis/
+
+# Editors and IDEs
+.vscode/
+.vscode-test/
+.idea/
+*.iml
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs, runtime files and local data
+*.log
+logs/
+log/
+*.pid
+*.seed
+*.pid.lock
+tmp/
+temp/
+.cache/
+
+# Jupyter
+.ipynb_checkpoints
+profile_default/
+.ipython/
+*.nbconvert.ipynb
+
+# Sphinx / docs
+docs/_build/
+
+# Python tooling caches
+.mypy_cache/
+.pyre/
+.pytype/
+
+# Dependency managers / lockfiles
+Pipfile.lock
+.poetry/
+poetry.lock
+pipenv/
+
+# C extensions and build artifacts
+*.c
+*.so
+
+# Byte-compiled files & backups
+*.pyc
+*.pyo
+*.pyd
+*.orig
+
+# Databases and local state
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+
+# Secrets and keys
+credentials.json
+secrets/
+private_key.pem
+*.pem
+*.key
+*.crt
+id_rsa
+id_rsa.pub
+
+# Node (if present)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ML / deep learning artifacts, caches and outputs
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.h5
+*.onnx
+*.tflite
+checkpoints/
+checkpoints-*/
+models/
+saved_models/
+model/
+weights/
+weights-*/
+runs/
+outputs/
+output/
+predictions/
+inference/
+generation_outputs/
+data-bin/
+fairseq-bin/
+transformers_cache/
+.huggingface/
+.cache/huggingface
+.cache/torch
+.cache/transformers
+torch_extensions/
+torch_cache/
+cache_model/
+hf_cache/
+
+# Experiment tracking / run directories
+wandb/
+mlruns/
+tensorboard/
+tb_logs/
+
+# Large archives / dataset files
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.gz
+*.7z
+
+# CI / local artifacts
+*.retry
+*.report
+coverage/
+pip-log.txt
+
+# Misc
+*.manifest
+*.spec
+*.class
+*.apk
+*.dex
+.Dockerfile.swp
+.dvc/
+
+# Project-specific: fairseq / transformers / pytorch
+# (keep the caches local; remove these lines if you want to check-in model artifacts)
+data-bin/
+fairseq-bin/
+
+# Ignore defunct setup scripts
+setup_*.sh
+
+# End of file
