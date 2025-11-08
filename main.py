@@ -17,7 +17,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Sami Translation API")
+# Configure FastAPI so the OpenAPI JSON and docs live under /translation/*
+app = FastAPI(
+    title="Translation API",
+    openapi_url="/translation/openapi.json",
+    docs_url="/translation/docs",
+    redoc_url="/translation/redoc",
+)
 
 # CORS configuration - allow the frontend to access this API
 app.add_middleware(
@@ -44,17 +50,34 @@ async def startup_event():
     translation_service = TranslationService()
     logger.info("Translation service ready!")
 
-class TranslationRequest(BaseModel):
-    text: str
+from typing import List, Optional, Union
+
+
+class Request(BaseModel):
+    text: Union[str, List[str]]
     src: str  # "sme" (Northern Sami) or "nor" (Norwegian)
     tgt: str  # "sme" or "nor"
+    domain: Optional[str] = "general"
+    application: Optional[str] = None
 
-class TranslationResponse(BaseModel):
-    result: str
+
+class Response(BaseModel):
+    result: Union[str, List[str]]
+
+
+class Domain(BaseModel):
+    name: str
+    code: str
+    languages: List[str]
+
+
+class Config(BaseModel):
+    xml_support: Optional[bool] = True
+    domains: List[Domain]
 
 @app.get("/")
 async def root():
-    """Health check endpoint"""
+    """Health check endpoint (kept for convenience)"""
     return {
         "status": "ok",
         "service": "Sami Translation API",
@@ -62,8 +85,24 @@ async def root():
         "device": str(translation_service.device) if translation_service else "not initialized"
     }
 
-@app.post("/translation/v2", response_model=TranslationResponse)
-async def translate(request: TranslationRequest):
+
+# Provide the configuration endpoint under /translation/v2 to match TartuNLP API
+@app.get("/translation/v2", response_model=Config, tags=["v2"])
+async def get_config_v2(x_api_key: Optional[str] = None):
+    """Get the configuration of available NMT models."""
+    # Return a minimal but compatible configuration describing available domains
+    domains = [
+        Domain(
+            name="General",
+            code="general",
+            # language pairs are hyphen-separated 3-letter-ish codes (we use our 3-letter style)
+            languages=["sme-nor", "nor-sme"],
+        )
+    ]
+    return Config(domains=domains)
+
+@app.post("/translation/v2", response_model=Response, tags=["v2"])
+async def translate(request: Request, x_api_key: Optional[str] = None, application: Optional[str] = None):
     """
     Translate text between Northern Sami and Norwegian
     Compatible with TartuNLP API format
@@ -75,26 +114,50 @@ async def translate(request: TranslationRequest):
     valid_langs = {"sme", "nor"}
     if request.src not in valid_langs or request.tgt not in valid_langs:
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail=f"Invalid language codes. Must be 'sme' or 'nor'. Got src={request.src}, tgt={request.tgt}"
         )
-    
-    if request.src == request.tgt:
-        # No translation needed
-        return TranslationResponse(result=request.text)
-    
+
+    # Helper to translate a single string
+    def _translate_str(s: str) -> str:
+        if request.src == request.tgt:
+            return s
+        return translation_service.translate(text=s, src_lang=request.src, tgt_lang=request.tgt)
+
     try:
-        logger.info(f"Translating {len(request.text)} chars from {request.src} to {request.tgt}")
-        result = translation_service.translate(
-            text=request.text,
-            src_lang=request.src,
-            tgt_lang=request.tgt
-        )
-        logger.info(f"Translation complete: {result[:50]}...")
-        return TranslationResponse(result=result)
+        # Support both single string and list of sentences
+        if isinstance(request.text, list):
+            translated = [ _translate_str(s) for s in request.text ]
+        else:
+            translated = _translate_str(request.text)
+
+        # Return in a shape compatible with TartuNLP Response (result: string or array)
+        return Response(result=translated)
     except Exception as e:
         logger.error(f"Translation error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Translation failed: {str(e)}")
+
+
+# Override OpenAPI generation to include servers and keep consistency with the external API
+from fastapi.openapi.utils import get_openapi
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title=app.title,
+        version="2.3.1",
+        description="An API that provides translations using neural machine translation models. Developed by TartuNLP - the NLP research group of the University of Tartu.",
+        routes=app.routes,
+    )
+    # Add servers entry so the OpenAPI matches the external API base path
+    openapi_schema["servers"] = [{"url": "/translation"}]
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
 
 if __name__ == "__main__":
     import uvicorn
