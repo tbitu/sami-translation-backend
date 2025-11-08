@@ -1,13 +1,14 @@
 """
-Translation service using TartuNLP smugri3_14 model from HuggingFace
-Supports Northern Sami ↔ Norwegian translation (bidirectional)
-Uses Fairseq library for TartuNLP's Finno-Ugric NMT models
+Translation service using TartuNLP smugri3_14 model from HuggingFace.
+Supports bidirectional translation across Sami languages, Finnish, and Norwegian.
+Uses Fairseq library for TartuNLP's Finno-Ugric NMT models.
 """
 import torch
 import logging
 import os
 import glob
 import copy
+from typing import Dict, Iterable, List, Optional, Set
 
 # NOTE: We avoid importing heavy external libraries (fairseq, huggingface_hub)
 # at module import time so the module can be imported in lightweight test
@@ -16,16 +17,39 @@ import copy
 
 logger = logging.getLogger(__name__)
 
+
+# Desired API-facing language codes mapped to possible internal Fairseq codes.
+# Multiple candidates allow us to gracefully handle checkpoints that expose
+# alternate identifiers for the same language. Codes should be ordered by
+# preference.
+SUPPORTED_LANGUAGE_ALIASES: Dict[str, List[str]] = {
+    "sme": ["sme_Latn"],       # Northern Sami
+    "smj": ["smj_Latn"],       # Lule Sami
+    "sma": ["sma_Latn"],       # South Sami
+    "smn": ["smn_Latn"],       # Inari Sami
+    "sms": ["sms_Latn"],       # Skolt Sami
+    "sjd": ["sjd_Cyrl"],       # Kildin Sami (Cyrillic script)
+    "sje": ["sje_Latn"],       # Pite Sami
+    "sju": ["sju_Latn"],       # Ume Sami
+    "nor": ["nob_Latn", "nor_Latn"],  # Norwegian Bokmål
+    "fin": ["fin_Latn"],       # Finnish
+}
+
 class TranslationService:
     """
-    Manages translation models for Northern Sami ↔ Norwegian
-    Uses TartuNLP smugri3_14 Finno-Ugric NMT model (bidirectional)
+    Manages translation models for Sami languages, Finnish, and Norwegian.
+    Uses TartuNLP smugri3_14 Finno-Ugric NMT model (bidirectional).
     """
     
     def __init__(self):
         """Initialize translation models and load to GPU if available"""
-    # Prefer explicit cuda:0 device when CUDA is available. This helps
-    # when libraries expect a device index rather than the generic 'cuda'.
+        self.mock = False
+        self.model = None
+        self.lang_map: Dict[str, str] = {}
+        self.supported_languages: List[str] = []
+
+        # Prefer explicit cuda:0 device when CUDA is available. This helps
+        # when libraries expect a device index rather than the generic 'cuda'.
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         logger.info(f"Using device: {self.device}")
         
@@ -41,9 +65,9 @@ class TranslationService:
         if test_mode:
             logger.info("TEST_MODE enabled - using mock translation service (no HF/Fairseq)")
             self.mock = True
-            self.model = None
             # Use CPU for tests
             self.device = torch.device('cpu')
+            self._finalize_language_map()
             return
 
         # Real model loading - import heavy deps lazily
@@ -218,15 +242,20 @@ class TranslationService:
             logger.warning(f"Could not move Fairseq model to device {self.device}: {e}")
         
         logger.info("✓ TartuNLP smugri3_14 translation model loaded successfully!")
+
+        available_langs = self._discover_internal_languages()
+        self._finalize_language_map(available_langs)
+        if self.supported_languages:
+            logger.info("API language codes enabled: %s", ", ".join(self.supported_languages))
     
     def translate(self, text: str, src_lang: str, tgt_lang: str) -> str:
         """
-        Translate text between Northern Sami and Norwegian using TartuNLP smugri3_14 (bidirectional)
+        Translate text between supported languages using TartuNLP smugri3_14 (bidirectional)
         
         Args:
             text: Text to translate
-            src_lang: Source language code ("sme" for Northern Sami or "nor" for Norwegian)
-            tgt_lang: Target language code ("sme" or "nor")
+            src_lang: Source language code (Sami languages, "fin", or "nor")
+            tgt_lang: Target language code (Sami languages, "fin", or "nor")
         
         Returns:
             Translated text
@@ -234,14 +263,9 @@ class TranslationService:
         if src_lang == tgt_lang:
             return text
         
-        # Map our language codes to TartuNLP smugri3_14 codes
-        lang_map = {
-            "sme": "sme_Latn",  # Northern Sami
-            "nor": "nob_Latn"   # Norwegian Bokmål
-        }
-        
-        src_code = lang_map.get(src_lang)
-        tgt_code = lang_map.get(tgt_lang)
+        # Map API language codes to the internal Fairseq identifiers
+        src_code = self.lang_map.get(src_lang)
+        tgt_code = self.lang_map.get(tgt_lang)
         
         if not src_code or not tgt_code:
             raise ValueError(f"Unsupported language pair: {src_lang} → {tgt_lang}")
@@ -351,4 +375,130 @@ class TranslationService:
         logger.info(f"Final translation: '{translation}'")
 
         return translation
+
+    def get_supported_languages(self) -> List[str]:
+        """Return the API language codes that are currently enabled."""
+        return list(self.supported_languages)
+
+    def _finalize_language_map(self, available_internal_codes: Optional[Iterable[str]] = None) -> None:
+        """Build a map between API-facing codes and Fairseq internal codes."""
+        available_lookup: Dict[str, str] = {}
+        discovery_provided = available_internal_codes is not None
+        if available_internal_codes:
+            for code in available_internal_codes:
+                if not isinstance(code, str):
+                    continue
+                normalized = code.strip()
+                if not normalized:
+                    continue
+                available_lookup[normalized.lower()] = normalized
+
+        lang_map: Dict[str, str] = {}
+        missing: List[str] = []
+
+        for api_code, candidates in SUPPORTED_LANGUAGE_ALIASES.items():
+            chosen: Optional[str] = None
+            for candidate in candidates:
+                if not candidate:
+                    continue
+                candidate_key = candidate.lower()
+                if not available_lookup:
+                    chosen = candidate
+                    break
+                if candidate_key in available_lookup:
+                    chosen = available_lookup[candidate_key]
+                    break
+            if chosen:
+                lang_map[api_code] = chosen
+            else:
+                missing.append(api_code)
+
+        self.lang_map = lang_map
+        self.supported_languages = sorted(lang_map.keys())
+
+        if missing and available_lookup:
+            logger.warning(
+                "The loaded model does not expose the requested languages: %s",
+                ", ".join(missing)
+            )
+        elif not available_lookup and discovery_provided and not getattr(self, 'mock', False):
+            logger.warning(
+                "Could not discover internal language codes from the loaded model; defaulting to configured aliases."
+            )
+
+    def _discover_internal_languages(self) -> Set[str]:
+        """Inspect the loaded model to determine available internal language identifiers."""
+        discovered: Set[str] = set()
+
+        if not self.model:
+            return discovered
+
+        try:
+            cfg = getattr(self.model, 'cfg', None)
+            task_cfg = getattr(cfg, 'task', None) if cfg else None
+            discovered.update(self._parse_lang_container(getattr(task_cfg, 'langs', None)))
+        except Exception:
+            logger.debug("Unable to inspect model.cfg.task.langs", exc_info=True)
+
+        try:
+            task = getattr(self.model, 'task', None)
+            if task and hasattr(task, 'args'):
+                args = task.args
+                discovered.update(self._parse_lang_container(getattr(args, 'langs', None)))
+                discovered.update(self._parse_lang_pairs(getattr(args, 'lang_pairs', None)))
+        except Exception:
+            logger.debug("Unable to inspect task arguments for language metadata", exc_info=True)
+
+        return {lang for lang in discovered if isinstance(lang, str) and lang.strip()}
+
+    @staticmethod
+    def _parse_lang_container(container: Optional[Iterable[str]]) -> Set[str]:
+        """Parse any iterable or comma-separated container of language codes."""
+        result: Set[str] = set()
+        if not container:
+            return result
+
+        if isinstance(container, str):
+            tokens = [token.strip() for token in container.split(',')]
+            result.update(token for token in tokens if token)
+            return result
+
+        if isinstance(container, (list, tuple, set)):
+            for item in container:
+                if isinstance(item, str) and item.strip():
+                    result.add(item.strip())
+            return result
+
+        if isinstance(container, Iterable):
+            for item in container:
+                if isinstance(item, str) and item.strip():
+                    result.add(item.strip())
+        return result
+
+    @staticmethod
+    def _parse_lang_pairs(pairs: Optional[Iterable[str]]) -> Set[str]:
+        """Parse lang pair definitions of the form 'src-tgt'."""
+        result: Set[str] = set()
+        if not pairs:
+            return result
+
+        iterable: Iterable[str]
+        if isinstance(pairs, str):
+            iterable = [p.strip() for p in pairs.split(',') if p.strip()]
+        elif isinstance(pairs, (list, tuple, set)):
+            iterable = [p for p in pairs if isinstance(p, str)]
+        elif isinstance(pairs, Iterable):
+            iterable = [p for p in pairs if isinstance(p, str)]
+        else:
+            return result
+
+        for pair in iterable:
+            if '-' not in pair:
+                continue
+            src, tgt = pair.split('-', 1)
+            if src and src.strip():
+                result.add(src.strip())
+            if tgt and tgt.strip():
+                result.add(tgt.strip())
+        return result
 

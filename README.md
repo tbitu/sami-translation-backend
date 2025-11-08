@@ -156,6 +156,14 @@ Response:
 ## Language Codes
 
 - `sme`: Northern Sami (Davvisámegiella)
+- `smj`: Lule Sami
+- `sma`: South Sami
+- `smn`: Inari Sami
+- `sms`: Skolt Sami
+- `sjd`: Kildin Sami
+- `sje`: Pite Sami
+- `sju`: Ume Sami
+- `fin`: Finnish
 - `nor`: Norwegian (Bokmål)
 
 ## Performance

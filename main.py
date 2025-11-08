@@ -1,7 +1,7 @@
 """
-FastAPI server for TartuNLP smugri3_14 translation
-Runs Northern Sami ↔ Norwegian translation models on NVIDIA GPU
-Uses TartuNLP's Finno-Ugric NMT model with Fairseq
+FastAPI server for TartuNLP smugri3_14 translation.
+Runs Sami ↔ Finnish/Norwegian translation models on NVIDIA GPU.
+Uses TartuNLP's Finno-Ugric NMT model with Fairseq.
 """
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -48,6 +48,9 @@ async def startup_event():
         logger.info(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
     
     translation_service = TranslationService()
+    enabled_langs = translation_service.get_supported_languages()
+    if enabled_langs:
+        logger.info("Enabled API languages: %s", ", ".join(enabled_langs))
     logger.info("Translation service ready!")
 
 from typing import List, Optional, Union
@@ -55,8 +58,8 @@ from typing import List, Optional, Union
 
 class Request(BaseModel):
     text: Union[str, List[str]]
-    src: str  # "sme" (Northern Sami) or "nor" (Norwegian)
-    tgt: str  # "sme" or "nor"
+    src: str  # Sami 639-3 code, "fin", or "nor"
+    tgt: str  # Sami 639-3 code, "fin", or "nor"
     domain: Optional[str] = "general"
     application: Optional[str] = None
 
@@ -90,13 +93,26 @@ async def root():
 @app.get("/translation/v2", response_model=Config, tags=["v2"])
 async def get_config_v2(x_api_key: Optional[str] = None):
     """Get the configuration of available NMT models."""
+    if not translation_service:
+        raise HTTPException(status_code=503, detail="Translation service not initialized")
+
+    supported_langs = translation_service.get_supported_languages()
+    if not supported_langs:
+        raise HTTPException(status_code=503, detail="No languages available")
+    language_pairs = [
+        f"{src}-{tgt}"
+        for src in supported_langs
+        for tgt in supported_langs
+        if src != tgt
+    ]
+
     # Return a minimal but compatible configuration describing available domains
     domains = [
         Domain(
             name="General",
             code="general",
             # language pairs are hyphen-separated 3-letter-ish codes (we use our 3-letter style)
-            languages=["sme-nor", "nor-sme"],
+            languages=language_pairs,
         )
     ]
     return Config(domains=domains)
@@ -104,18 +120,24 @@ async def get_config_v2(x_api_key: Optional[str] = None):
 @app.post("/translation/v2", response_model=Response, tags=["v2"])
 async def translate(request: Request, x_api_key: Optional[str] = None, application: Optional[str] = None):
     """
-    Translate text between Northern Sami and Norwegian
+    Translate text between Sami languages, Finnish, and Norwegian.
     Compatible with TartuNLP API format
     """
     if not translation_service:
         raise HTTPException(status_code=503, detail="Translation service not initialized")
     
     # Validate language codes
-    valid_langs = {"sme", "nor"}
+    valid_langs = set(translation_service.get_supported_languages())
+    if not valid_langs:
+        raise HTTPException(status_code=503, detail="No languages available")
     if request.src not in valid_langs or request.tgt not in valid_langs:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid language codes. Must be 'sme' or 'nor'. Got src={request.src}, tgt={request.tgt}"
+            detail=(
+                "Invalid language codes. Supported values: "
+                + ", ".join(sorted(valid_langs))
+                + f". Got src={request.src}, tgt={request.tgt}"
+            )
         )
 
     # Helper to translate a single string
