@@ -3,6 +3,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # NVIDIA NGC PyTorch base (multi-arch GPU, includes Arm SBSA builds).
+        # Override if you want a different NGC tag.
+        BASE_IMAGE: ${BASE_IMAGE:-nvcr.io/nvidia/pytorch:25.12-py3}
     image: sami-translation-backend:latest
     ports:
       - "8000:8000"
@@ -16,7 +20,10 @@ services:
     volumes:
       # Preferred: bind-mount the host user's HF cache so Docker and non-Docker
       # processes share the same downloaded artifacts.
-      - ${HOME}/.cache/huggingface:/data/hf
+      # IMPORTANT (rootless / devcontainer): If you run `docker compose` from a
+      # devcontainer (where $HOME may be /root), set HF_CACHE_HOST_DIR in your
+      # shell or a local .env file to the *host* user's cache path.
+      - ${HF_CACHE_HOST_DIR:-${HOME}/.cache/huggingface}:/data/hf
 
       # Alternative: use a named volume (easy, per-user, but not shared with non-Docker runs)
       # - hf-cache:/data/hf

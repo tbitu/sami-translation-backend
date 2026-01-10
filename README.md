@@ -291,6 +291,10 @@ If you want Docker and non-Docker processes on the host to share the same cache
 (recommended), bind-mount the host HuggingFace cache directory into the container:
 `$HOME/.cache/huggingface` → `/data/hf`.
 
+If you run Docker commands from inside a devcontainer (where `$HOME` may be `/root`),
+do **not** use `$HOME/.cache/...` in `-v` arguments. Instead, set an explicit host
+path via `HF_CACHE_HOST_DIR`.
+
 The app also supports `HF_CACHE_DIR` (or `MODEL_CACHE_DIR`) which is passed to
 `huggingface_hub.snapshot_download()`.
 
@@ -305,12 +309,41 @@ Build:
 docker build -t sami-translation-backend:latest .
 ```
 
+This project is GPU-first. For `linux/arm64` GPU builds (like DGX Spark / Arm SBSA),
+installing CUDA-enabled PyTorch via `pip` is often not viable because official
+CUDA wheels may not exist for that platform.
+
+So the Dockerfile defaults to an NVIDIA NGC PyTorch base image (`nvcr.io/nvidia/pytorch:*`).
+The newest NGC tags ship Python 3.12, so the Dockerfile bootstraps a Python 3.11 runtime
+inside the container (via micromamba) to keep `fairseq==0.12.2` working.
+which is published with multi-arch support and includes PyTorch + CUDA already.
+
+With your host driver `580.95.05`, you can run containers based on CUDA 12.8
+(NGC 25.01 requires driver 570+) and CUDA 12.6 (NGC 24.10 requires driver 560+).
+The default base tag is `24.10-py3` to avoid Python 3.12 compatibility risk.
+
+If you want to pin a different NGC tag, override the build arg:
+```bash
+docker build \
+  --build-arg BASE_IMAGE=nvcr.io/nvidia/pytorch:25.12-py3 \
+  -t sami-translation-backend:latest .
+```
+
+NGC images require a registry login:
+```bash
+docker login nvcr.io
+# Username: $oauthtoken
+# Password: <your NGC API key>
+```
+
 Run with a persistent HF cache:
 ```bash
+export HF_CACHE_HOST_DIR="$HOME/.cache/huggingface"
+
 docker run --rm -p 8000:8000 --gpus all \
   -e MODEL_DTYPE=fp32 \
   -e HF_CACHE_DIR=/data/hf \
-  -v "$HOME/.cache/huggingface":/data/hf \
+  -v "$HF_CACHE_HOST_DIR":/data/hf \
   sami-translation-backend:latest
 ```
 
@@ -330,9 +363,11 @@ Two common approaches:
    - Good when you want *many* different containers/images/stacks to share one cache path.
    - Example using the host user’s default HF cache location:
      ```bash
+     export HF_CACHE_HOST_DIR="$HOME/.cache/huggingface"
+
      docker run --rm -p 8000:8000 --gpus all \
        -e HF_CACHE_DIR=/data/hf \
-       -v "$HOME/.cache/huggingface":/data/hf \
+       -v "$HF_CACHE_HOST_DIR":/data/hf \
        sami-translation-backend:latest
      ```
    - Or use a dedicated directory like `/srv/hf-cache` (ensure permissions allow writes).
@@ -341,6 +376,7 @@ Two common approaches:
 
 Starts the service with the host HuggingFace cache bind-mounted at `/data/hf`:
 ```bash
+export HF_CACHE_HOST_DIR="$HOME/.cache/huggingface"
 docker compose up --build
 ```
 
@@ -351,6 +387,12 @@ For GPU, many setups require:
 ```bash
 docker compose run --gpus all --service-ports sami-translation-backend
 ```
+
+#### CI (GHCR builds)
+
+The GitHub Actions workflow builds multi-arch images. Because the Dockerfile pulls
+an NGC base image by default, you need to add an NGC API key as the repository
+secret `NGC_API_KEY` (used to `docker login nvcr.io`).
 
 #### Kubernetes note
 

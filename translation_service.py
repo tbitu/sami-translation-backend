@@ -18,6 +18,44 @@ from typing import Dict, Iterable, List, Optional, Set
 logger = logging.getLogger(__name__)
 
 
+def _is_truthy_env(var_name: str) -> bool:
+    value = os.environ.get(var_name)
+    return value is not None and value.strip() in ("1", "true", "True", "yes", "YES")
+
+
+def _find_cached_hf_snapshot(cache_root: str, repo_id: str) -> Optional[str]:
+    """Best-effort discovery of an existing HuggingFace snapshot on disk.
+
+    This avoids any network calls when running in offline environments.
+    Expected layout:
+      <cache_root>/models--ORG--REPO/snapshots/<REV_HASH>
+    """
+    try:
+        org, name = repo_id.split("/", 1)
+    except ValueError:
+        return None
+
+    base = os.path.join(cache_root, f"models--{org}--{name}", "snapshots")
+    if not os.path.isdir(base):
+        return None
+
+    try:
+        candidates = [
+            os.path.join(base, d)
+            for d in os.listdir(base)
+            if os.path.isdir(os.path.join(base, d))
+        ]
+    except Exception:
+        return None
+
+    if not candidates:
+        return None
+
+    # Prefer the most recently modified snapshot directory.
+    candidates.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    return candidates[0]
+
+
 # Desired API-facing language codes mapped to possible internal Fairseq codes.
 # Multiple candidates allow us to gracefully handle checkpoints that expose
 # alternate identifiers for the same language. Codes should be ordered by
@@ -74,6 +112,21 @@ class TranslationService:
         from fairseq.models.transformer import TransformerModel
         from huggingface_hub import snapshot_download
 
+        # PyTorch 2.6+ defaults torch.load(weights_only=True), which restricts
+        # what Python globals can be unpickled from checkpoints. Fairseq calls
+        # torch.load() without specifying weights_only, and some Fairseq model
+        # checkpoints include an argparse.Namespace in the serialized state.
+        #
+        # We trust this checkpoint source (HuggingFace repo), so allowlist
+        # argparse.Namespace to avoid startup crashes.
+        try:
+            import argparse
+            if hasattr(torch, "serialization") and hasattr(torch.serialization, "add_safe_globals"):
+                torch.serialization.add_safe_globals([argparse.Namespace])
+                logger.info("Allowlisted argparse.Namespace for torch.load(weights_only=True)")
+        except Exception as e:
+            logger.debug(f"Could not configure torch.serialization safe globals: {e}")
+
         # Model name from HuggingFace - TartuNLP's smugri3_14 Finno-Ugric NMT model
         # This model supports bidirectional translation between 27 languages including:
         # - Northern Sami (sme_Latn)
@@ -94,15 +147,73 @@ class TranslationService:
         #
         # Note: huggingface_hub will also honor HF_HOME / HF_HUB_CACHE etc.
         hf_cache_dir = os.environ.get('HF_CACHE_DIR') or os.environ.get('MODEL_CACHE_DIR')
-        if hf_cache_dir:
+
+        hf_offline = (
+            _is_truthy_env("HF_HUB_OFFLINE")
+            or _is_truthy_env("HF_LOCAL_FILES_ONLY")
+            or _is_truthy_env("TRANSFORMERS_OFFLINE")
+        )
+
+        if hf_offline and hf_cache_dir:
+            cached = _find_cached_hf_snapshot(hf_cache_dir, self.model_name)
+            if cached:
+                logger.info(
+                    "HF offline/local-files-only enabled; using cached snapshot: %s",
+                    cached,
+                )
+                model_path = cached
+            else:
+                model_path = None
+        else:
+            model_path = None
+
+        # Make downloads more diagnosable and robust.
+        # - resume_download avoids restarting after partial downloads.
+        # - max_workers can be tuned down if a network/proxy struggles.
+        # - etag_timeout helps avoid “stuck” HEAD requests on flaky networks.
+        try:
+            hf_max_workers = int(os.environ.get('HF_MAX_WORKERS', '8'))
+        except Exception:
+            hf_max_workers = 8
+        try:
+            hf_etag_timeout = int(os.environ.get('HF_ETAG_TIMEOUT', '30'))
+        except Exception:
+            hf_etag_timeout = 30
+
+        logger.info(
+            "Starting HuggingFace snapshot download (resume_download=True, max_workers=%s, etag_timeout=%ss)",
+            hf_max_workers,
+            hf_etag_timeout,
+        )
+
+        if model_path is not None:
+            # Already resolved via offline cache.
+            pass
+        elif hf_cache_dir:
             try:
                 os.makedirs(hf_cache_dir, exist_ok=True)
             except Exception as e:
                 raise OSError(f"Unable to create HF cache dir '{hf_cache_dir}': {e}")
             logger.info(f"Using HuggingFace cache dir: {hf_cache_dir}")
-            model_path = snapshot_download(repo_id=self.model_name, cache_dir=hf_cache_dir)
+
+            # snapshot_download prints progress bars to stderr; ensure PYTHONUNBUFFERED=1
+            # in containers so logs stream.
+            model_path = snapshot_download(
+                repo_id=self.model_name,
+                cache_dir=hf_cache_dir,
+                resume_download=True,
+                max_workers=hf_max_workers,
+                etag_timeout=hf_etag_timeout,
+                local_files_only=hf_offline,
+            )
         else:
-            model_path = snapshot_download(repo_id=self.model_name)
+            model_path = snapshot_download(
+                repo_id=self.model_name,
+                resume_download=True,
+                max_workers=hf_max_workers,
+                etag_timeout=hf_etag_timeout,
+                local_files_only=hf_offline,
+            )
         logger.info(f"Model downloaded to: {model_path}")
         
         # Allow overrides via environment variables (useful for local testing)
