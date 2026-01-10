@@ -193,4 +193,10 @@ fairseq-bin/
 # Ignore defunct setup scripts
 setup_*.sh
 
+# Dev Container: keep .devcontainer/ in git, but ignore local-only overrides/secrets
+.devcontainer/.env
+.devcontainer/.env.*
+.devcontainer/docker-compose.override.yml
+.devcontainer/**/secrets/
+
 # End of file
