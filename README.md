@@ -278,7 +278,84 @@ sudo systemctl status sami-translation
 
 ### Option 2: Docker (Coming Soon)
 
-Docker support with NVIDIA runtime for GPU passthrough.
+Docker support is included. The key design goal is that large HuggingFace model
+downloads are cached *outside* the container filesystem so restarts/upgrades do
+not re-download multi-GB artifacts.
+
+#### How caching works (recommended)
+
+HuggingFace Hub caches downloads under `HF_HOME` / `HF_HUB_CACHE`.
+This repo’s container setup pins those to `/data/hf`.
+
+If you want Docker and non-Docker processes on the host to share the same cache
+(recommended), bind-mount the host HuggingFace cache directory into the container:
+`$HOME/.cache/huggingface` → `/data/hf`.
+
+The app also supports `HF_CACHE_DIR` (or `MODEL_CACHE_DIR`) which is passed to
+`huggingface_hub.snapshot_download()`.
+
+#### Docker (GPU) quickstart
+
+Prereqs:
+- Docker Engine
+- NVIDIA drivers + NVIDIA Container Toolkit (so `--gpus all` works)
+
+Build:
+```bash
+docker build -t sami-translation-backend:latest .
+```
+
+Run with a persistent HF cache:
+```bash
+docker run --rm -p 8000:8000 --gpus all \
+  -e MODEL_DTYPE=fp32 \
+  -e HF_CACHE_DIR=/data/hf \
+  -v "$HOME/.cache/huggingface":/data/hf \
+  sami-translation-backend:latest
+```
+
+#### Rootless Docker + shared cache
+
+Yes — HuggingFace caching works fine in rootless Docker because it’s just files
+on disk. The only requirement is that the mounted cache directory is writable
+by the user your rootless Docker daemon runs as.
+
+Two common approaches:
+
+1) **Named volume (easy, per-user)**
+   - Good when all containers run under the same rootless Docker user.
+   - Volumes live under `~/.local/share/docker/volumes` for that user.
+
+2) **Bind mount a shared host directory (most shareable)**
+   - Good when you want *many* different containers/images/stacks to share one cache path.
+   - Example using the host user’s default HF cache location:
+     ```bash
+     docker run --rm -p 8000:8000 --gpus all \
+       -e HF_CACHE_DIR=/data/hf \
+       -v "$HOME/.cache/huggingface":/data/hf \
+       sami-translation-backend:latest
+     ```
+   - Or use a dedicated directory like `/srv/hf-cache` (ensure permissions allow writes).
+
+#### Docker Compose
+
+Starts the service with the host HuggingFace cache bind-mounted at `/data/hf`:
+```bash
+docker compose up --build
+```
+
+If you prefer a named Docker volume instead (not shared with non-Docker runs), use the
+commented `hf-cache` volume option in `docker-compose.yml`.
+
+For GPU, many setups require:
+```bash
+docker compose run --gpus all --service-ports sami-translation-backend
+```
+
+#### Kubernetes note
+
+Mount a PVC at `/data/hf` (or set `HF_CACHE_DIR` to your mounted path). This is
+the most reliable way to keep the HuggingFace cache across pod restarts.
 
 ## Model Information
 

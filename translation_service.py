@@ -82,8 +82,27 @@ class TranslationService:
         
         logger.info(f"Loading TartuNLP smugri3_14 model from HuggingFace: {self.model_name}")
         
-        # Download model files from HuggingFace if not already cached
-        model_path = snapshot_download(repo_id=self.model_name)
+        # Download model files from HuggingFace if not already cached.
+        #
+        # Container best-practice: mount a persistent volume and point the HF
+        # cache there so subsequent container restarts do not re-download large
+        # artifacts.
+        #
+        # Supported env vars:
+        # - HF_CACHE_DIR (preferred): passed directly to huggingface_hub
+        # - MODEL_CACHE_DIR (legacy/convenience alias)
+        #
+        # Note: huggingface_hub will also honor HF_HOME / HF_HUB_CACHE etc.
+        hf_cache_dir = os.environ.get('HF_CACHE_DIR') or os.environ.get('MODEL_CACHE_DIR')
+        if hf_cache_dir:
+            try:
+                os.makedirs(hf_cache_dir, exist_ok=True)
+            except Exception as e:
+                raise OSError(f"Unable to create HF cache dir '{hf_cache_dir}': {e}")
+            logger.info(f"Using HuggingFace cache dir: {hf_cache_dir}")
+            model_path = snapshot_download(repo_id=self.model_name, cache_dir=hf_cache_dir)
+        else:
+            model_path = snapshot_download(repo_id=self.model_name)
         logger.info(f"Model downloaded to: {model_path}")
         
         # Allow overrides via environment variables (useful for local testing)

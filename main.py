@@ -5,6 +5,8 @@ Uses TartuNLP's Finno-Ugric NMT model with Fairseq.
 """
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel
 import torch
 from translation_service import TranslationService
@@ -17,13 +19,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configure FastAPI so the OpenAPI JSON and docs live under /translation/*
+# Configure FastAPI.
+# We implement our own OpenAPI + docs routes under /translation/* so we can
+# correctly handle reverse-proxy prefixes (e.g. /api/translation/v2) via
+# ASGI root_path or X-Forwarded-Prefix.
 app = FastAPI(
     title="Translation API",
-    openapi_url="/translation/openapi.json",
-    docs_url="/translation/docs",
-    redoc_url="/translation/redoc",
+    openapi_url=None,
+    docs_url=None,
+    redoc_url=None,
 )
+
+
+@app.middleware("http")
+async def forwarded_prefix_middleware(request, call_next):
+    """Honor X-Forwarded-Prefix so docs/OpenAPI work behind a path prefix."""
+    prefix = request.headers.get("x-forwarded-prefix")
+    if prefix:
+        # Normalize: ensure leading slash and no trailing slash
+        normalized = "/" + prefix.lstrip("/")
+        request.scope["root_path"] = normalized.rstrip("/")
+    return await call_next(request)
 
 # CORS configuration - allow the frontend to access this API
 app.add_middleware(
@@ -89,6 +105,45 @@ async def root():
     }
 
 
+@app.get("/translation/openapi.json", include_in_schema=False)
+async def openapi_json(request):
+    """OpenAPI schema with a server URL that respects root_path/prefix."""
+    schema = get_openapi(
+        title=app.title,
+        version="2.3.1",
+        description=(
+            "An API that provides translations using neural machine translation models. "
+            "Developed by TartuNLP - the NLP research group of the University of Tartu."
+        ),
+        routes=app.routes,
+    )
+
+    # When deployed behind a reverse proxy under a prefix (e.g. /api), ASGI
+    # root_path (or X-Forwarded-Prefix) should be set. OpenAPI clients then
+    # combine server.url + path, so set server.url to root_path.
+    root_path = request.scope.get("root_path", "") or ""
+    schema["servers"] = [{"url": root_path}]
+    return schema
+
+
+@app.get("/translation/docs", include_in_schema=False)
+async def swagger_ui(request):
+    root_path = request.scope.get("root_path", "") or ""
+    return get_swagger_ui_html(
+        openapi_url=f"{root_path}/translation/openapi.json",
+        title=f"{app.title} - Swagger UI",
+    )
+
+
+@app.get("/translation/redoc", include_in_schema=False)
+async def redoc_ui(request):
+    root_path = request.scope.get("root_path", "") or ""
+    return get_redoc_html(
+        openapi_url=f"{root_path}/translation/openapi.json",
+        title=f"{app.title} - ReDoc",
+    )
+
+
 # Provide the configuration endpoint under /translation/v2 to match TartuNLP API
 @app.get("/translation/v2", response_model=Config, tags=["v2"])
 async def get_config_v2(x_api_key: Optional[str] = None):
@@ -99,12 +154,10 @@ async def get_config_v2(x_api_key: Optional[str] = None):
     supported_langs = translation_service.get_supported_languages()
     if not supported_langs:
         raise HTTPException(status_code=503, detail="No languages available")
-    language_pairs = [
-        f"{src}-{tgt}"
-        for src in supported_langs
-        for tgt in supported_langs
-        if src != tgt
-    ]
+    # TartuNLP's public /translation/v2 includes same-language pairs (e.g. eng-eng).
+    # Keep ordering stable for clients by sorting.
+    sorted_langs = sorted(supported_langs)
+    language_pairs = [f"{src}-{tgt}" for src in sorted_langs for tgt in sorted_langs]
 
     # Return a minimal but compatible configuration describing available domains
     domains = [
@@ -159,27 +212,6 @@ async def translate(request: Request, x_api_key: Optional[str] = None, applicati
         logger.error(f"Translation error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Translation failed: {str(e)}")
 
-
-# Override OpenAPI generation to include servers and keep consistency with the external API
-from fastapi.openapi.utils import get_openapi
-
-
-def custom_openapi():
-    if app.openapi_schema:
-        return app.openapi_schema
-    openapi_schema = get_openapi(
-        title=app.title,
-        version="2.3.1",
-        description="An API that provides translations using neural machine translation models. Developed by TartuNLP - the NLP research group of the University of Tartu.",
-        routes=app.routes,
-    )
-    # Add servers entry so the OpenAPI matches the external API base path
-    openapi_schema["servers"] = [{"url": "/translation"}]
-    app.openapi_schema = openapi_schema
-    return app.openapi_schema
-
-
-app.openapi = custom_openapi
 
 if __name__ == "__main__":
     import uvicorn

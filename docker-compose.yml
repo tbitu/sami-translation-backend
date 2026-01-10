@@ -1,0 +1,37 @@
+services:
+  sami-translation-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sami-translation-backend:latest
+    ports:
+      - "8000:8000"
+    environment:
+      # Keep a single worker (also enforced in Dockerfile CMD)
+      - MODEL_DTYPE=fp32
+      # Optional: for private HF repos
+      # - HF_TOKEN=${HF_TOKEN}
+      # Cache is mounted at /data/hf (see volumes + Dockerfile ENV)
+      - HF_CACHE_DIR=/data/hf
+    volumes:
+      # Preferred: bind-mount the host user's HF cache so Docker and non-Docker
+      # processes share the same downloaded artifacts.
+      - ${HOME}/.cache/huggingface:/data/hf
+
+      # Alternative: use a named volume (easy, per-user, but not shared with non-Docker runs)
+      # - hf-cache:/data/hf
+    # GPU support:
+    # - With Docker Engine + NVIDIA Container Toolkit, either:
+    #   docker compose run --gpus all ...
+    # - Or uncomment the section below (Compose v2+ typically supports this):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+volumes:
+  hf-cache:
+    name: hf-cache

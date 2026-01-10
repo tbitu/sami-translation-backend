@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+*.swo
+.venv/
+venv/
+.git/
+.github/
+.devcontainer/
+.env
+.env.*
+Dockerfile*
+docker-compose*.yml
+
+# Large local caches
+.cache/
+hf-cache/
