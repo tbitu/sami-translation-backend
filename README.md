@@ -1,425 +1,231 @@
-# Translation Backend Server
+# Sami Translation Backend
 
-This backend server provides local Northern Sami ↔ Norwegian translation using TartuNLP models from HuggingFace, running on NVIDIA GPU for fast inference.
+FastAPI service that exposes a TartuNLP-compatible translation API for Sami ↔ Norwegian/Finnish using the Hugging Face model `tartuNLP/smugri3_14-finno-ugric-nmt` via Fairseq.
+
+This repo is optimized for GPU inference (CUDA), but can also run on CPU.
+
+## What’s in here
+
+- **HTTP API**: `GET /translation/v2` (capabilities) and `POST /translation/v2` (translate)
+- **Docs/OpenAPI**: `/translation/openapi.json`, `/translation/docs`, `/translation/redoc`
+- **Model loader**: downloads a Hugging Face snapshot on startup and locates SentencePiece + dictionary files automatically
+- **Container support**: Dockerfile uses an NVIDIA NGC PyTorch base image and patches Fairseq for Python 3.11 compatibility
 
 ## Requirements
 
-### Hardware
-- **NVIDIA GPU** with CUDA support (recommended: 4GB+ VRAM)
-- At least 8GB RAM
-- 5GB free disk space for models
+### Runtime
 
-### Software
-- **Python 3.11** (Required - fairseq is not compatible with Python 3.12)
-- CUDA Toolkit 12.9+ (for GPU support)
-- pip (Python package manager)
+- **Python 3.11** (Fairseq 0.12.x is not compatible with Python 3.12+)
+- Linux recommended
+- For GPU: NVIDIA driver + CUDA-capable GPU (and a CUDA-enabled PyTorch install)
 
-> **⚠️ Important:** This project requires Python 3.11. Fairseq (the translation library) has compatibility issues with Python 3.12 due to dataclass changes.
+### Disk
 
-## Installation
+- Expect a multi-GB Hugging Face cache on first startup (model + metadata).
 
-### 1. Install CUDA (if not already installed)
+## Quickstart (local, recommended)
 
-Check if CUDA is installed:
-```bash
-nvidia-smi
-```
-
-If not installed, download from: https://developer.nvidia.com/cuda-downloads
-
-### 2. Create Python Virtual Environment
-
-> **Quick Setup:** If you're on Linux and need to install Python 3.11, you can use the provided setup script:
-> ```bash
-> ./setup_python311.sh
-> ```
-> This will install Python 3.11 (if needed), create a new virtual environment, and install all dependencies.
-
-**Manual Setup:**
+1) Create and activate a virtualenv:
 
 ```bash
-# Install Python 3.11 if needed (Ubuntu/Debian)
-sudo apt update
-sudo apt install python3.11 python3.11-venv python3.11-dev
-
-# Create virtual environment with Python 3.11
 python3.11 -m venv venv
-source venv/bin/activate  # On Linux/Mac
-# or
-venv\Scripts\activate  # On Windows
+source venv/bin/activate
 ```
 
-### 3. Install Dependencies
-
-**Important:** Install PyTorch with CUDA support FIRST before other dependencies.
-
-**Step 1: Install PyTorch with CUDA 12.9 support:**
+2) Install **PyTorch first** (pick the CUDA build that matches your system):
 
 ```bash
+# Example for CUDA 12.9
 pip install torch --index-url https://download.pytorch.org/whl/cu129
 ```
 
-**Step 2: Install remaining dependencies:**
+3) Install the remaining dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-This will install:
-- **PyTorch with CUDA 12.9**: Deep learning framework with GPU support (installed first)
-- **FastAPI**: Web framework for the API
-- **Uvicorn**: ASGI server
-- **Fairseq**: Library for TartuNLP's Finno-Ugric NMT models
-- **SentencePiece**: Tokenizer for the translation models
-- **Accelerate**: For optimized model loading
-
-### 4. Download Models (Automatic on First Run)
-
-The TartuNLP smugri3_14 model will be automatically downloaded from HuggingFace on first startup:
-- **tartuNLP/smugri3_14-finno-ugric-nmt**: Multilingual Finno-Ugric NMT model supporting 27 languages including Northern Sami and Norwegian Bokmål (bidirectional, ~2GB)
-
-This is a specialized model trained on Finno-Ugric and Uralic language families, providing excellent quality for Northern Sami.
-
-Models are cached in `~/.cache/huggingface/` for future use.
-
-## Running the Server
-
-### Development Mode
+4) Start the server:
 
 ```bash
-cd backend
-source venv/bin/activate  # Activate virtual environment
 python main.py
 ```
 
-The server will start on `http://localhost:8000`
+Server listens on `http://localhost:8000`.
 
-### Production Mode
+## Running in production
+
+Use a **single worker** so the model isn’t loaded multiple times in memory:
 
 ```bash
-cd backend
-source venv/bin/activate
 uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1
 ```
 
-**Note**: Use only 1 worker to avoid loading models multiple times in memory.
+If you’re deploying behind Kubernetes / a container orchestrator, prefer **one Uvicorn process per container** and scale via replicas.
 
-## Verifying GPU Usage
+## API
 
-Check the startup logs for:
-```
-CUDA available: True
-GPU: NVIDIA GeForce RTX 3080
-GPU Memory: 10.00 GB
-```
+### Health
 
-Monitor GPU usage while translating:
-```bash
-watch -n 1 nvidia-smi
-```
-
-## API Endpoints
-
-### Health Check
 ```bash
 curl http://localhost:8000/
 ```
 
-Response:
-```json
-{
-  "status": "ok",
-  "service": "Sami Translation API",
-  "cuda_available": true,
-  "device": "cuda:0"
-}
+### OpenAPI + docs
+
+- OpenAPI: `GET /translation/openapi.json`
+- Swagger UI: `GET /translation/docs`
+- ReDoc: `GET /translation/redoc`
+
+### Capabilities (TartuNLP-compatible)
+
+```bash
+curl http://localhost:8000/translation/v2
 ```
 
-### Translation
+Returns a minimal domain config with the supported language pairs.
+
+### Translate
+
 ```bash
 curl -X POST http://localhost:8000/translation/v2 \
   -H "Content-Type: application/json" \
-  -d '{
-    "text": "Bures!",
-    "src": "sme",
-    "tgt": "nor"
-  }'
+  -d '{"text":"Bures!","src":"sme","tgt":"nor"}'
 ```
 
-Response:
+Response shape:
+
 ```json
-{
-  "result": "Hei!"
-}
+{"result":"..."}
 ```
 
-## Language Codes
+The `text` field can also be an array of strings.
 
-- `sme`: Northern Sami (Davvisámegiella)
-- `smj`: Lule Sami
-- `sma`: South Sami
-- `smn`: Inari Sami
-- `sms`: Skolt Sami
-- `sjd`: Kildin Sami
-- `sje`: Pite Sami
-- `sju`: Ume Sami
-- `fin`: Finnish
-- `nor`: Norwegian (Bokmål)
+### Language codes
 
-## Performance
+This service exposes **API-facing** codes and maps them to the internal model identifiers:
 
-### First Translation
-- Initial model loading: ~10-30 seconds (one-time on startup)
-- First inference: ~2-5 seconds (JIT compilation)
+- `sme` (Northern Sami)
+- `smj` (Lule Sami)
+- `sma` (South Sami)
+- `smn` (Inari Sami)
+- `sms` (Skolt Sami)
+- `sjd` (Kildin Sami)
+- `sje` (Pite Sami)
+- `sju` (Ume Sami)
+- `nor` (Norwegian Bokmål)
+- `fin` (Finnish)
 
-### Subsequent Translations
-- Short texts (<50 words): ~100-500ms
-- Long texts (>200 words): ~1-3 seconds
+The final set of enabled languages is discovered at startup; check `GET /translation/v2` (or logs) to see what is currently available.
 
-GPU acceleration provides 5-10x speedup compared to CPU inference.
+## Reverse proxy / path prefixes
 
-## Troubleshooting
+If you serve this app under a URL prefix (e.g. `/api`), the docs/OpenAPI routes need to know the prefix.
 
-### GPU Not Detected
+This app supports the `X-Forwarded-Prefix` header (e.g. set by NGINX/Traefik). When present, it is used to set the ASGI `root_path`, and OpenAPI’s `servers[0].url` is generated accordingly.
 
-**Problem**: Server starts but shows `CUDA available: False`
+## Configuration
 
-**Solutions**:
-1. Verify CUDA installation: `nvcc --version` (should show 12.x)
-2. Check PyTorch CUDA support:
-   ```python
-   import torch
-   print(torch.cuda.is_available())
-   print(torch.version.cuda)  # Should show 12.9
-   ```
-3. Reinstall PyTorch with CUDA 12.9:
-   ```bash
-   pip uninstall torch
-   pip install torch --index-url https://download.pytorch.org/whl/cu129
-   ```
+### Model + cache
 
-### Out of Memory (OOM)
+The model snapshot is downloaded via `huggingface_hub.snapshot_download()` and cached on disk.
 
-**Problem**: `CUDA out of memory` error
+Environment variables:
 
-**Solutions**:
-1. Close other GPU applications
-2. Use smaller batch sizes (models already use batch_size=1)
-3. Use CPU mode if GPU has <4GB VRAM:
-   ```python
-   # In translation_service.py, change:
-   self.device = torch.device("cpu")
-   ```
+- `HF_CACHE_DIR`: cache directory passed to `snapshot_download()` (recommended override)
+- `MODEL_CACHE_DIR`: legacy alias for `HF_CACHE_DIR`
+- `HF_TOKEN`: used by Hugging Face Hub for private repos (if applicable)
 
-### Slow First Request
+Offline / no-network modes (best effort):
 
-**Problem**: First translation takes 30+ seconds
+- `HF_HUB_OFFLINE=1` or `HF_LOCAL_FILES_ONLY=1` or `TRANSFORMERS_OFFLINE=1`
 
-**Cause**: Models need to be downloaded from HuggingFace on first run.
+Download tuning:
 
-**Solution**: Wait for initial download. Subsequent runs will use cached models.
+- `HF_MAX_WORKERS` (default `8`)
+- `HF_ETAG_TIMEOUT` seconds (default `30`)
 
-### Port Already in Use
+### Forcing specific model files
 
-**Problem**: `Address already in use` error
+If the auto-discovery logic can’t find the right files inside the snapshot, you can override:
 
-**Solution**: Change port or kill existing process:
+- `SENTENCEPIECE_MODEL`: absolute path, or a path relative to the snapshot directory
+- `FIXED_DICTIONARY`: absolute path, or a path relative to the snapshot directory
+
+### Precision
+
+- `MODEL_DTYPE=fp32` or `USE_FP32=1`: forces model parameters to float32 (higher numerical stability, more VRAM)
+
+## TEST_MODE (fast, deterministic, not “real” inference)
+
+Setting `TEST_MODE=1` starts a lightweight mock translator:
+
 ```bash
-# Find process using port 8000
-lsof -i :8000
-# Kill it
-kill -9 <PID>
-# Or use a different port
-python main.py --port 8001
+TEST_MODE=1 python main.py
 ```
 
-## Updating Frontend Configuration
+Important:
 
-The frontend is already configured to use `http://localhost:8000` by default.
+- No Hugging Face downloads
+- No Fairseq import/model loading
+- CPU-only
+- Returns deterministic canned outputs for a small set of phrases (and a simple fallback for everything else)
 
-To use a different host/port, create a `.env` file in the project root:
-```bash
-VITE_TRANSLATION_API_URL=http://your-server:8000/translation/v2
-```
+Use this for quick API wiring checks—not for performance or model debugging.
 
-Then rebuild the frontend:
-```bash
-npm run build
-```
+## Docker
 
-## Production Deployment
+The Dockerfile defaults to an **NVIDIA NGC PyTorch** base image (`nvcr.io/nvidia/pytorch:*`) so CUDA-enabled PyTorch is available in the container.
 
-### Option 1: Systemd Service (Linux)
+### Build
 
-Create `/etc/systemd/system/sami-translation.service`:
-```ini
-[Unit]
-Description=Sami Translation API
-After=network.target
-
-[Service]
-Type=simple
-User=youruser
-WorkingDirectory=/home/youruser/repos/sami-chat-spa/backend
-Environment="PATH=/home/youruser/repos/sami-chat-spa/backend/venv/bin"
-ExecStart=/home/youruser/repos/sami-chat-spa/backend/venv/bin/python main.py
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
-```bash
-sudo systemctl enable sami-translation
-sudo systemctl start sami-translation
-sudo systemctl status sami-translation
-```
-
-### Option 2: Docker (Coming Soon)
-
-Docker support is included. The key design goal is that large HuggingFace model
-downloads are cached *outside* the container filesystem so restarts/upgrades do
-not re-download multi-GB artifacts.
-
-#### How caching works (recommended)
-
-HuggingFace Hub caches downloads under `HF_HOME` / `HF_HUB_CACHE`.
-This repo’s container setup pins those to `/data/hf`.
-
-If you want Docker and non-Docker processes on the host to share the same cache
-(recommended), bind-mount the host HuggingFace cache directory into the container:
-`$HOME/.cache/huggingface` → `/data/hf`.
-
-If you run Docker commands from inside a devcontainer (where `$HOME` may be `/root`),
-do **not** use `$HOME/.cache/...` in `-v` arguments. Instead, set an explicit host
-path via `HF_CACHE_HOST_DIR`.
-
-The app also supports `HF_CACHE_DIR` (or `MODEL_CACHE_DIR`) which is passed to
-`huggingface_hub.snapshot_download()`.
-
-#### Docker (GPU) quickstart
-
-Prereqs:
-- Docker Engine
-- NVIDIA drivers + NVIDIA Container Toolkit (so `--gpus all` works)
-
-Build:
 ```bash
 docker build -t sami-translation-backend:latest .
 ```
 
-This project is GPU-first. For `linux/arm64` GPU builds (like DGX Spark / Arm SBSA),
-installing CUDA-enabled PyTorch via `pip` is often not viable because official
-CUDA wheels may not exist for that platform.
+NGC images may require registry login:
 
-So the Dockerfile defaults to an NVIDIA NGC PyTorch base image (`nvcr.io/nvidia/pytorch:*`).
-The newest NGC tags ship Python 3.12, so the Dockerfile bootstraps a Python 3.11 runtime
-inside the container (via micromamba) to keep `fairseq==0.12.2` working.
-which is published with multi-arch support and includes PyTorch + CUDA already.
-
-With your host driver `580.95.05`, you can run containers based on CUDA 12.8
-(NGC 25.01 requires driver 570+) and CUDA 12.6 (NGC 24.10 requires driver 560+).
-The default base tag is `24.10-py3` to avoid Python 3.12 compatibility risk.
-
-If you want to pin a different NGC tag, override the build arg:
-```bash
-docker build \
-  --build-arg BASE_IMAGE=nvcr.io/nvidia/pytorch:25.12-py3 \
-  -t sami-translation-backend:latest .
-```
-
-NGC images require a registry login:
 ```bash
 docker login nvcr.io
 # Username: $oauthtoken
 # Password: <your NGC API key>
 ```
 
-Run with a persistent HF cache:
-```bash
-export HF_CACHE_HOST_DIR="$HOME/.cache/huggingface"
+### Run (GPU + persistent Hugging Face cache)
 
+```bash
 docker run --rm -p 8000:8000 --gpus all \
-  -e MODEL_DTYPE=fp32 \
   -e HF_CACHE_DIR=/data/hf \
-  -v "$HF_CACHE_HOST_DIR":/data/hf \
+  -v "$HOME/.cache/huggingface":/data/hf \
   sami-translation-backend:latest
 ```
 
-#### Rootless Docker + shared cache
+### Docker Compose
 
-Yes — HuggingFace caching works fine in rootless Docker because it’s just files
-on disk. The only requirement is that the mounted cache directory is writable
-by the user your rootless Docker daemon runs as.
-
-Two common approaches:
-
-1) **Named volume (easy, per-user)**
-   - Good when all containers run under the same rootless Docker user.
-   - Volumes live under `~/.local/share/docker/volumes` for that user.
-
-2) **Bind mount a shared host directory (most shareable)**
-   - Good when you want *many* different containers/images/stacks to share one cache path.
-   - Example using the host user’s default HF cache location:
-     ```bash
-     export HF_CACHE_HOST_DIR="$HOME/.cache/huggingface"
-
-     docker run --rm -p 8000:8000 --gpus all \
-       -e HF_CACHE_DIR=/data/hf \
-       -v "$HF_CACHE_HOST_DIR":/data/hf \
-       sami-translation-backend:latest
-     ```
-   - Or use a dedicated directory like `/srv/hf-cache` (ensure permissions allow writes).
-
-#### Docker Compose
-
-Starts the service with the host HuggingFace cache bind-mounted at `/data/hf`:
 ```bash
 export HF_CACHE_HOST_DIR="$HOME/.cache/huggingface"
 docker compose up --build
 ```
 
-If you prefer a named Docker volume instead (not shared with non-Docker runs), use the
-commented `hf-cache` volume option in `docker-compose.yml`.
+For GPU, some setups require:
 
-For GPU, many setups require:
 ```bash
 docker compose run --gpus all --service-ports sami-translation-backend
 ```
 
-#### CI (GHCR builds)
+## Troubleshooting
 
-The GitHub Actions workflow builds multi-arch images. Because the Dockerfile pulls
-an NGC base image by default, you need to add an NGC API key as the repository
-secret `NGC_API_KEY` (used to `docker login nvcr.io`).
+### CUDA is available: False
 
-#### Kubernetes note
+- Verify your PyTorch install is CUDA-enabled: `python -c "import torch; print(torch.cuda.is_available(), torch.version.cuda)"`
+- Ensure your NVIDIA driver is installed and compatible with your CUDA runtime
 
-Mount a PVC at `/data/hf` (or set `HF_CACHE_DIR` to your mounted path). This is
-the most reliable way to keep the HuggingFace cache across pod restarts.
+### Slow first startup
 
-## Model Information
+First run downloads the model snapshot; subsequent startups reuse the cache.
 
-The translation models are provided by TartuNLP (University of Tartu) as part of their Uralic language machine translation project:
-- **Models**: TartuNLP/opus-mt-urj-mul and TartuNLP/opus-mt-mul-urj
-- **Paper**: "Neural Machine Translation for Low-Resource Uralic Languages"
-- **License**: Apache 2.0
-- **Training Data**: OPUS corpus with enhanced Uralic language data
-- **Model Type**: Transformer-based sequence-to-sequence models
-- **Languages**: Specialized for Uralic language family (Finnish, Estonian, Northern Sami, etc.)
+### OOM (GPU out of memory)
 
-These models are specifically optimized for Northern Sami (Davvisámegiella), which is spoken primarily in northern Norway, Sweden, and Finland. They provide better quality than generic multilingual models due to their focus on Uralic languages.
-
-## Support
-
-For issues related to:
-- **Backend server**: Check logs in terminal
-- **Model loading**: Ensure internet connection for first download
-- **GPU issues**: Verify NVIDIA drivers and CUDA toolkit
-- **Translation quality**: Report to TartuNLP/Helsinki-NLP
-
-## License
-
-Backend code: MIT License
-Translation models: Apache 2.0 (Helsinki-NLP)
+- Close other GPU processes
+- Consider running with CPU (no special flag; install CPU-only PyTorch)
+- Avoid `MODEL_DTYPE=fp32` if you’re tight on VRAM

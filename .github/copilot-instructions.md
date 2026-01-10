@@ -1,143 +1,33 @@
-## Project snapshot: Sami Translation Backend
+## Sami Translation Backend (agent notes)
 
-This file contains concise, actionable guidance for AI coding agents working on this repository.
+### Big picture
+- [main.py](main.py) runs a single-process FastAPI app exposing a TartuNLP-compatible API:
+  - `GET /translation/v2` returns capabilities (language pairs)
+  - `POST /translation/v2` translates (`text` can be a string or list)
+- [translation_service.py](translation_service.py) owns *all* model lifecycle: Hugging Face snapshot download/cache, locating `*.model` + `*dict*.txt`, and loading a Fairseq `TransformerModel`.
+- Deploy with **one Uvicorn worker** so the multi‑GB model isn’t duplicated in memory (see [Dockerfile](Dockerfile) CMD and README).
 
-Key files
-- `main.py` - FastAPI server and startup hooks. Models are loaded on startup via `TranslationService`.
-- `translation_service.py` - Core model-loading and translation logic. See `TEST_MODE` handling and env overrides (`SENTENCEPIECE_MODEL`, `FIXED_DICTIONARY`).
-- `start.sh` - Example startup script and venv instructions used by developers.
-- `README.md` - Installation notes: Python 3.11 required, PyTorch must be installed with CUDA first.
-- `tests/` - Integration tests that start the server in `TEST_MODE` and exercise `/translation/v2` endpoints.
+### Reverse proxy / prefixes
+- The app serves docs/OpenAPI under `/translation/*` and honors `X-Forwarded-Prefix` via middleware so `/translation/openapi.json` and `/translation/docs` work behind a path prefix (see [main.py](main.py)).
 
-Big-picture architecture
-- A single-process FastAPI app exposes a small, TartuNLP-compatible translation API under `/translation/*`.
-- `TranslationService` is responsible for downloading (via `huggingface_hub.snapshot_download`), locating files (sentencepiece models and dictionaries), and instantiating a Fairseq `TransformerModel`.
-- The app expects relatively large model files and is GPU-accelerated. The server is intended to run with a single Uvicorn worker so models are not duplicated in memory.
+### Dev workflows (local)
+- Create/activate venv, install CUDA-enabled PyTorch **first**, then `pip install -r requirements.txt` (see [README.md](README.md) and [requirements.txt](requirements.txt)).
+- Run the server: `python main.py` (or `uvicorn main:app --workers 1`).
+- Use [start.sh](start.sh) as a reference startup script; it also exports `MODEL_DTYPE=fp32` / `USE_FP32=1` for higher numerical stability (more VRAM).
 
-Developer workflows and commands (explicit)
-- There is a project `venv` used by developers. Always activate the virtual environment before running any Python command, tests, or the server. Example (Linux/macOS):
+### Model loading + configuration
+- HF caching: set `HF_CACHE_DIR` (or legacy `MODEL_CACHE_DIR`) to persist downloads; containers default to `/data/hf` (see [translation_service.py](translation_service.py), [Dockerfile](Dockerfile), [docker-compose.yml](docker-compose.yml)).
+- Offline best-effort: `HF_HUB_OFFLINE=1` / `HF_LOCAL_FILES_ONLY=1` / `TRANSFORMERS_OFFLINE=1` uses an existing cached snapshot when `HF_CACHE_DIR` is set.
+- File overrides (relative to snapshot allowed): `SENTENCEPIECE_MODEL`, `FIXED_DICTIONARY`.
+- Language codes are **API-facing** and mapped to internal Fairseq identifiers via `SUPPORTED_LANGUAGE_ALIASES`.
 
-```bash
-source venv/bin/activate
-```
+### TEST_MODE
+- Setting `TEST_MODE=1` makes `TranslationService` a lightweight mock (no HF download, no Fairseq import, CPU-only) and returns deterministic canned outputs for a few phrases.
+- Don’t use `TEST_MODE` to debug real model/GPU issues.
 
-- Install PyTorch with CUDA support first, then install other requirements. Example (match CUDA to your system):
+### Docker/CI gotchas (important)
+- [Dockerfile](Dockerfile) intentionally uses an NVIDIA NGC PyTorch base and prevents pip from replacing CUDA torch; Fairseq is installed with `--no-deps` and then patched for Python 3.11 + torch version parsing.
+- GitHub Actions workflow [docker-build.yml](.github/workflows/docker-build.yml) can skip builds if `nvcr.io/nvidia/pytorch:*` isn’t accessible from runners.
 
-```bash
-# Install PyTorch (example for CUDA 12.9)
-pip install torch --index-url https://download.pytorch.org/whl/cu129
-# Then install other deps
-pip install -r requirements.txt
-```
-
-- Run server for development (in `venv`):
-
-```bash
-python main.py
-```
-
-- `start.sh` is a convenience script that checks `venv` and dependencies before starting the server.
-
-- Tests: run `pytest` from inside the activated `venv`. Tests in `tests/` start a subprocess server with `TEST_MODE=1` (see `tests/test_api.py`).
-
-- IMPORTANT WARNING: NEVER start the server in `TEST_MODE` when attempting to reproduce real runtime or model-related issues. Setting `TEST_MODE=1` enables deterministic mocks and skips real model downloads and inference, so it will not reproduce production behavior or runtime errors. Use `TEST_MODE` only for the fast unit/integration tests under `tests/`.
-
-- Important: the integrated tests use `TEST_MODE` and deterministic mocks — they do not reproduce full runtime behavior (model downloads, true GPU OOMs, or real inference). To reproduce real runtime errors, run the server (with real models) and exercise the API directly (curl or HTTP client) — see the curl example below.
-
-Project-specific conventions & patterns
-- TEST_MODE is used to avoid heavy downloads and dependencies during tests. Set `TEST_MODE=1` in the environment for fast, deterministic behavior (see `translation_service.py` and `tests/test_api.py`).
-- Language codes: the service accepts `sme` and `nor` as top-level codes (mapped to internal tokens `sme_Latn` / `nob_Latn` in `translation_service.py`).
-- Model snapshot discovery: the service searches the HuggingFace snapshot for `*.model` (SentencePiece) and `*dict*.txt` (fixed dictionary); maintainers sometimes override via `SENTENCEPIECE_MODEL` and `FIXED_DICTIONARY` env vars.
-- Device handling: prefer `cuda:0` explicitly when CUDA is available. Code attempts multiple ways to move Fairseq wrappers to device (`.to()`, `.cuda()`, underlying `.model`).
-
-Integration points & external dependencies
-- HuggingFace (`huggingface_hub.snapshot_download`) for model artifacts.
-- Fairseq `TransformerModel` for model loading and generation.
-- PyTorch for tensors and device management (must match CUDA version installed).
-- FastAPI / Uvicorn for serving the HTTP API.
-
-Examples useful for edits or PRs
-- To add a new language mapping, update `lang_map` in `translation_service.py` and the validation in `main.py`.
-- To mock additional phrases for tests, extend `mock_map` in `TranslationService` (used when `TEST_MODE` is enabled).
-
-Edge cases agents should watch for
-- Missing model files in snapshot: `translation_service.py` raises an OSError listing available files — when editing snapshot logic, preserve helpful diagnostics.
-- Moving Fairseq wrappers to device may fail silently; any change touching device logic should preserve multiple fallbacks.
-
-When creating PRs
-- Run `pytest` locally; tests start a subprocess server with `TEST_MODE=1` and will fail if `main.py`'s startup changes behavior.
-- Avoid importing heavy libraries at module import time. `translation_service.py` intentionally imports Fairseq and huggingface_hub lazily inside the constructor to keep tests lightweight.
-
-If you need clarification
-- If a scaffolded change requires runtime access to real model files (non-TEST_MODE), document how to set `SENTENCEPIECE_MODEL` and `FIXED_DICTIONARY` so CI can be configured or maintainers can reproduce locally.
-
-Quick manual reproduction (real errors)
-
-1. Activate venv and start the server (do not set `TEST_MODE`):
-
-```bash
-source venv/bin/activate
-python main.py
-```
-
-2. Reproduce an API call with curl (example Sami -> Norwegian):
-
-```bash
-curl -X POST http://localhost:8000/translation/v2 \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Bures!","src":"sme","tgt":"nor"}'
-```
-
-Use the server logs when debugging real issues (model download issues, device placement, OOMs). Tests alone won't capture those runtime-specific failures.
-
-Please review these notes and tell me if you'd like me to expand any section (examples, tests, or CI guidance).
-## Project snapshot: Sami Translation Backend
-
-This file contains concise, actionable guidance for AI coding agents working on this repository.
-
-Key files
-- `main.py` - FastAPI server and startup hooks. Models are loaded on startup via `TranslationService`.
-- `translation_service.py` - Core model-loading and translation logic. See `TEST_MODE` handling and env overrides (`SENTENCEPIECE_MODEL`, `FIXED_DICTIONARY`).
-- `start.sh` - Example startup script and venv instructions used by developers.
-- `README.md` - Installation notes: Python 3.11 required, PyTorch must be installed with CUDA first.
-- `tests/` - Integration tests that start the server in `TEST_MODE` and exercise `/translation/v2` endpoints.
-
-Big-picture architecture
-- A single-process FastAPI app exposes a small, TartuNLP-compatible translation API under `/translation/*`.
-- `TranslationService` is responsible for downloading (via `huggingface_hub.snapshot_download`), locating files (sentencepiece models and dictionaries), and instantiating a Fairseq `TransformerModel`.
-- The app expects relatively large model files and is GPU-accelerated. The server is intended to run with a single Uvicorn worker so models are not duplicated in memory.
-
-Developer workflows and commands (explicit)
-- Create and activate a Python 3.11 venv, then install PyTorch with CUDA support before `pip install -r requirements.txt` (see `README.md`).
-  - PyTorch install example: `pip install torch --index-url https://download.pytorch.org/whl/cu129` (match CUDA version to your system).
-- Run server for development: `python main.py` (starts FastAPI on 0.0.0.0:8000). `start.sh` demonstrates a full startup flow and checks.
-- Tests: `pytest` (tests live under `tests/` and expect `TEST_MODE=1` when the server subprocess is started by the test fixture).
-
-Project-specific conventions & patterns
-- TEST_MODE is used to avoid heavy downloads and dependencies during tests. Set `TEST_MODE=1` in the environment for fast, deterministic behavior (see `translation_service.py` and `tests/test_api.py`).
-- Language codes: the service accepts `sme` and `nor` as top-level codes (mapped to internal tokens `sme_Latn` / `nob_Latn` in `translation_service.py`).
-- Model snapshot discovery: the service searches the HuggingFace snapshot for `*.model` (SentencePiece) and `*dict*.txt` (fixed dictionary); maintainers sometimes override via `SENTENCEPIECE_MODEL` and `FIXED_DICTIONARY` env vars.
-- Device handling: prefer `cuda:0` explicitly when CUDA is available. Code attempts multiple ways to move Fairseq wrappers to device (`.to()`, `.cuda()`, underlying `.model`).
-
-Integration points & external dependencies
-- HuggingFace (`huggingface_hub.snapshot_download`) for model artifacts.
-- Fairseq `TransformerModel` for model loading and generation.
-- PyTorch for tensors and device management (must match CUDA version installed).
-- FastAPI / Uvicorn for serving the HTTP API.
-
-Examples useful for edits or PRs
-- To add a new language mapping, update `lang_map` in `translation_service.py` and the validation in `main.py`.
-- To mock additional phrases for tests, extend `mock_map` in `TranslationService` (used when `TEST_MODE` is enabled).
-
-Edge cases agents should watch for
-- Missing model files in snapshot: `translation_service.py` raises an OSError listing available files — when editing snapshot logic, preserve helpful diagnostics.
-- Moving Fairseq wrappers to device may fail silently; any change touching device logic should preserve multiple fallbacks.
-
-When creating PRs
-- Run `pytest` locally; tests start a subprocess server with `TEST_MODE=1` and will fail if `main.py`'s startup changes behavior.
-- Avoid importing heavy libraries at module import time. `translation_service.py` intentionally imports Fairseq and huggingface_hub lazily inside the constructor to keep tests lightweight.
-
-If you need clarification
-- If a scaffolded change requires runtime access to real model files (non-TEST_MODE), document how to set `SENTENCEPIECE_MODEL` and `FIXED_DICTIONARY` so CI can be configured or maintainers can reproduce locally.
-
-Please review these notes and tell me if you'd like me to expand any section (examples, tests, or CI guidance).
+### Repo conventions
+- Avoid importing heavy deps at module import time; Fairseq + HF Hub are imported lazily inside `TranslationService.__init__` (keep this pattern when refactoring).

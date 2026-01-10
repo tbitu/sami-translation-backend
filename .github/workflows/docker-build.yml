@@ -1,10 +1,8 @@
 name: Docker build
 
 on:
-  push:
-    branches:
-      - "**"
-  pull_request:
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -60,32 +58,12 @@ jobs:
         with:
           images: ${{ env.IMAGE }}
           tags: |
+            type=ref,event=tag
             type=sha
-            type=ref,event=branch
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ github.event.release.prerelease == false }}
 
-      - name: Build (PR)
-        if: github.event_name == 'pull_request' && steps.ngc.outputs.ok == 'true'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: false
-          platforms: linux/amd64
-          provenance: false
-          sbom: false
-          tags: ${{ steps.meta.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=min
-
-      - name: Skip PR build (NGC base not accessible)
-        if: github.event_name == 'pull_request' && steps.ngc.outputs.ok != 'true'
-        run: |
-          echo "Skipping Docker build for PR because nvcr.io/nvidia/pytorch:25.12-py3 is not accessible."
-          echo "If nvcr.io requires authentication on GitHub runners, this workflow cannot proceed without credentials."
-
-      - name: Build (default branch)
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && steps.ngc.outputs.ok == 'true'
+      - name: Build (release)
+        if: github.event_name == 'release' && steps.ngc.outputs.ok == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -99,10 +77,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=min
 
-      - name: Skip default branch build (NGC base not accessible)
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && steps.ngc.outputs.ok != 'true'
+      - name: Skip release build (NGC base not accessible)
+        if: github.event_name == 'release' && steps.ngc.outputs.ok != 'true'
         run: |
-          echo "Skipping Docker build for default branch because nvcr.io/nvidia/pytorch:25.12-py3 is not accessible."
+          echo "Skipping Docker build because nvcr.io/nvidia/pytorch:25.12-py3 is not accessible."
           echo "This Dockerfile depends on nvcr.io/nvidia/pytorch; GitHub runners may require credentials to access it."
 
   build-arm64:
@@ -154,32 +132,12 @@ jobs:
         with:
           images: ${{ env.IMAGE }}
           tags: |
+            type=ref,event=tag
             type=sha
-            type=ref,event=branch
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ github.event.release.prerelease == false }}
 
-      - name: Build (PR)
-        if: github.event_name == 'pull_request' && steps.ngc.outputs.ok == 'true'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: false
-          platforms: linux/arm64
-          provenance: false
-          sbom: false
-          tags: ${{ steps.meta.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=min
-
-      - name: Skip PR build (NGC base not accessible)
-        if: github.event_name == 'pull_request' && steps.ngc.outputs.ok != 'true'
-        run: |
-          echo "Skipping Docker build for PR because nvcr.io/nvidia/pytorch:25.12-py3 is not accessible."
-          echo "If nvcr.io requires authentication on GitHub runners, this workflow cannot proceed without credentials."
-
-      - name: Build (default branch)
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && steps.ngc.outputs.ok == 'true'
+      - name: Build (release)
+        if: github.event_name == 'release' && steps.ngc.outputs.ok == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -193,8 +151,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=min
 
-      - name: Skip default branch build (NGC base not accessible)
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && steps.ngc.outputs.ok != 'true'
+      - name: Skip release build (NGC base not accessible)
+        if: github.event_name == 'release' && steps.ngc.outputs.ok != 'true'
         run: |
-          echo "Skipping Docker build for default branch because nvcr.io/nvidia/pytorch:25.12-py3 is not accessible."
+          echo "Skipping Docker build because nvcr.io/nvidia/pytorch:25.12-py3 is not accessible."
           echo "This Dockerfile depends on nvcr.io/nvidia/pytorch; GitHub runners may require credentials to access it."
