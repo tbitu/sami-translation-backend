@@ -18,15 +18,17 @@ services:
       # Cache is mounted at /data/hf (see volumes + Dockerfile ENV)
       - HF_CACHE_DIR=/data/hf
     volumes:
-      # Preferred: bind-mount the host user's HF cache so Docker and non-Docker
-      # processes share the same downloaded artifacts.
-      # IMPORTANT (rootless / devcontainer): If you run `docker compose` from a
-      # devcontainer (where $HOME may be /root), set HF_CACHE_HOST_DIR in your
-      # shell or a local .env file to the *host* user's cache path.
-      - ${HF_CACHE_HOST_DIR:-${HOME}/.cache/huggingface}:/data/hf
+      # Default: use a named volume for a persistent cache store.
+      - hf-cache:/data/hf
 
-      # Alternative: use a named volume (easy, per-user, but not shared with non-Docker runs)
-      # - hf-cache:/data/hf
+      # Alternative: bind-mount a host directory (useful if you want Docker and
+      # non-Docker processes to share the same HF cache).
+      #
+      # IMPORTANT (rootless / devcontainer): Docker volume source paths are
+      # evaluated by the *host* daemon. If you run `docker compose` from a
+      # devcontainer (where $HOME may be /root), set HF_CACHE_HOST_DIR to a host
+      # path (e.g. /home/<user>/.cache/huggingface).
+      # - ${HF_CACHE_HOST_DIR:-${HOME}/.cache/huggingface}:/data/hf
     # GPU support:
     # - With Docker Engine + NVIDIA Container Toolkit, either:
     #   docker compose run --gpus all ...
