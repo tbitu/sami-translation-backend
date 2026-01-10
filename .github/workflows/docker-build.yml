@@ -17,6 +17,9 @@ jobs:
   build-amd64:
     runs-on: ubuntu-latest
 
+    outputs:
+      built: ${{ steps.out.outputs.built }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -70,7 +73,7 @@ jobs:
           tags: |
             type=ref,event=tag
             type=sha
-            type=raw,value=latest,enable=${{ github.event_name == 'release' && github.event.release.prerelease == false }}
+            type=raw,value=latest,enable=${{ (github.event_name == 'release' && github.event.release.prerelease == false) || (github.event_name == 'workflow_dispatch' && github.ref_name == 'main') }}
 
       - name: Compute amd64 tag list
         if: steps.ngc.outputs.ok == 'true'
@@ -101,6 +104,17 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=min
 
+      - name: Record build outcome
+        id: out
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.ngc.outputs.ok }}" = "true" ]; then
+            echo "built=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "built=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Skip build (NGC base not accessible)
         if: steps.ngc.outputs.ok != 'true'
         run: |
@@ -109,6 +123,9 @@ jobs:
 
   build-arm64:
     runs-on: ubuntu-latest
+
+    outputs:
+      built: ${{ steps.out.outputs.built }}
 
     steps:
       - name: Checkout
@@ -166,7 +183,7 @@ jobs:
           tags: |
             type=ref,event=tag
             type=sha
-            type=raw,value=latest,enable=${{ github.event_name == 'release' && github.event.release.prerelease == false }}
+            type=raw,value=latest,enable=${{ (github.event_name == 'release' && github.event.release.prerelease == false) || (github.event_name == 'workflow_dispatch' && github.ref_name == 'main') }}
 
       - name: Compute arm64 tag list
         if: steps.ngc.outputs.ok == 'true'
@@ -196,6 +213,17 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=min
 
+      - name: Record build outcome
+        id: out
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.ngc.outputs.ok }}" = "true" ]; then
+            echo "built=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "built=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Skip build (NGC base not accessible)
         if: steps.ngc.outputs.ok != 'true'
         run: |
@@ -207,6 +235,7 @@ jobs:
     needs:
       - build-amd64
       - build-arm64
+    if: needs.build-amd64.outputs.built == 'true' && needs.build-arm64.outputs.built == 'true'
 
     steps:
       - name: Set up Docker Buildx
@@ -233,7 +262,7 @@ jobs:
           tags: |
             type=ref,event=tag
             type=sha
-            type=raw,value=latest,enable=${{ github.event_name == 'release' && github.event.release.prerelease == false }}
+            type=raw,value=latest,enable=${{ (github.event_name == 'release' && github.event.release.prerelease == false) || (github.event_name == 'workflow_dispatch' && github.ref_name == 'main') }}
 
       - name: Publish multi-arch manifests
         shell: bash
