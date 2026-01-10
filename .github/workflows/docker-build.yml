@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-amd64:
     runs-on: ubuntu-latest
 
     steps:
@@ -35,7 +35,7 @@ jobs:
           else
             echo "ok=false" >> "$GITHUB_OUTPUT"
             echo "NGC base image is NOT accessible from this runner."
-            echo "If nvcr.io requires authentication, configure repo secret NGC_API_KEY."
+            echo "If nvcr.io requires authentication from GitHub runners, this workflow cannot proceed without credentials."
           fi
 
       - name: Compute image name
@@ -61,7 +61,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: false
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -79,7 +79,87 @@ jobs:
           context: .
           file: ./Dockerfile
           push: false
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Skip default branch build (NGC base not accessible)
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && steps.ngc.outputs.ok != 'true'
+        run: |
+          echo "Skipping Docker build for default branch because nvcr.io/nvidia/pytorch:25.12-py3 is not accessible."
+          echo "This Dockerfile depends on nvcr.io/nvidia/pytorch; GitHub runners may require credentials to access it."
+
+  build-arm64:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Check NGC base image availability (anonymous or logged-in)
+        id: ngc
+        shell: bash
+        run: |
+          set -euo pipefail
+          if docker buildx imagetools inspect nvcr.io/nvidia/pytorch:25.12-py3 >/dev/null 2>&1; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            echo "NGC base image is accessible."
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "NGC base image is NOT accessible from this runner."
+            echo "If nvcr.io requires authentication from GitHub runners, this workflow cannot proceed without credentials."
+          fi
+
+      - name: Compute image name
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build (PR)
+        if: github.event_name == 'pull_request' && steps.ngc.outputs.ok == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          platforms: linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Skip PR build (NGC base not accessible)
+        if: github.event_name == 'pull_request' && steps.ngc.outputs.ok != 'true'
+        run: |
+          echo "Skipping Docker build for PR because nvcr.io/nvidia/pytorch:25.12-py3 is not accessible."
+          echo "If nvcr.io requires authentication on GitHub runners, this workflow cannot proceed without credentials."
+
+      - name: Build (default branch)
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && steps.ngc.outputs.ok == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          platforms: linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
