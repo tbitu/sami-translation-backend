@@ -15,7 +15,7 @@ docker pull ghcr.io/tbitu/sami-translation-backend:latest
 Create a persistent cache volume (recommended):
 
 ```bash
-docker volume create sami-hf-cache
+docker volume create hf-cache
 ```
 
 Run it (GPU, with a persistent Hugging Face cache):
@@ -23,7 +23,7 @@ Run it (GPU, with a persistent Hugging Face cache):
 ```bash
 docker run --rm -p 8000:8000 --gpus all \
   -e HF_CACHE_DIR=/data/hf \
-  -v sami-hf-cache:/data/hf \
+  -v hf-cache:/data/hf \
   ghcr.io/tbitu/sami-translation-backend:latest
 ```
 
