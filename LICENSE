@@ -24,25 +24,42 @@ SOFTWARE.
 THIRD-PARTY MODEL LICENSE
 ================================================================================
 
-This software uses the smugri3_14-finno-ugric-nmt neural machine translation
-model developed by TartuNLP (Natural Language Processing research group at the
-University of Tartu).
+This software uses the Tahetorn_9B neural machine translation model developed
+by TartuNLP (Natural Language Processing research group at the University of
+Tartu), which is based on Unbabel/Tower-Plus-9B and Google's Gemma 2 9B.
 
-Model: tartuNLP/smugri3_14-finno-ugric-nmt
-Source: https://huggingface.co/tartuNLP/smugri3_14-finno-ugric-nmt
-License: CC-BY-4.0 (Creative Commons Attribution 4.0 International)
+Model: tartuNLP/Tahetorn_9B
+Source: https://huggingface.co/tartuNLP/Tahetorn_9B
+License: CC-BY-NC-SA-4.0 (Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International)
 
-The model is licensed under CC-BY-4.0, which requires attribution:
+Base Model: Unbabel/Tower-Plus-9B
+License: CC-BY-NC-4.0
 
-    smugri3_14-finno-ugric-nmt Model
-    Copyright (c) TartuNLP, University of Tartu
-    Licensed under CC-BY-4.0
-    https://creativecommons.org/licenses/by/4.0/
+Base Architecture: Google Gemma 2 9B
+License: Gemma Terms of Use (https://ai.google.dev/gemma/terms)
 
-When using this software with the smugri3_14 model, you must:
+⚠️ IMPORTANT - NON-COMMERCIAL USE RESTRICTION ⚠️
+
+The Tahetorn_9B model is licensed under CC-BY-NC-SA-4.0, which PROHIBITS
+COMMERCIAL USE. While this software's code is MIT-licensed, the combined work
+(software + model) is subject to the non-commercial restriction of CC-BY-NC-SA-4.0.
+
+You CANNOT use this software with the Tahetorn_9B model for commercial purposes.
+
+When using this software with the Tahetorn_9B model, you must:
 1. Give appropriate credit to TartuNLP and the University of Tartu
-2. Provide a link to the CC-BY-4.0 license
+2. Provide a link to the CC-BY-NC-SA-4.0 license
 3. Indicate if changes were made to the model
+4. If you remix, transform, or build upon the model, you must distribute your
+   contributions under the same CC-BY-NC-SA-4.0 license
+5. Comply with the Gemma Terms of Use for the base architecture
 
-For the full text of the CC-BY-4.0 license, visit:
-https://creativecommons.org/licenses/by/4.0/legalcode
+Attribution:
+
+    Tahetorn_9B Model
+    Copyright (c) TartuNLP, University of Tartu
+    Licensed under CC-BY-NC-SA-4.0
+    https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+For the full text of the CC-BY-NC-SA-4.0 license, visit:
+https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode

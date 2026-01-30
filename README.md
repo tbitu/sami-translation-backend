@@ -104,6 +104,15 @@ Quantization (for resource-constrained deployments):
 
 This software is licensed under the [MIT License](LICENSE).
 
-The neural machine translation model used by this software (`tartuNLP/Tahetorn_9B`, based on Unbabel/Tower-Plus-9B) is developed by [TartuNLP](https://tartunlp.ai/) at the University of Tartu and is licensed under [CC-BY-NC-SA-4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). When using this software, appropriate attribution must be given to TartuNLP and the University of Tartu as required by the CC-BY-NC-SA-4.0 license.
+**⚠️ IMPORTANT - NON-COMMERCIAL USE ONLY ⚠️**
 
-The base model (Unbabel/Tower-Plus-9B) is licensed under CC-BY-NC-4.0.
+The neural machine translation model used by this software (`tartuNLP/Tahetorn_9B`, based on Unbabel/Tower-Plus-9B and Google Gemma 2 9B) is developed by [TartuNLP](https://tartunlp.ai/) at the University of Tartu and is licensed under [CC-BY-NC-SA-4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+**The CC-BY-NC-SA-4.0 license PROHIBITS COMMERCIAL USE.** While this software's code is MIT-licensed, the combined work (software + model) cannot be used for commercial purposes.
+
+When using this software, you must:
+- Give appropriate attribution to TartuNLP and the University of Tartu
+- Comply with all terms of the CC-BY-NC-SA-4.0 license
+- NOT use it for commercial purposes
+
+The base model (Unbabel/Tower-Plus-9B) is licensed under CC-BY-NC-4.0, and the base architecture (Google Gemma 2 9B) has its own terms of use.
