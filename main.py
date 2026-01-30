@@ -1,7 +1,7 @@
 """
-FastAPI server for TartuNLP smugri3_14 translation.
+FastAPI server for TartuNLP Tahetorn_9B translation.
 Runs Sami ↔ Finnish/Norwegian translation models on NVIDIA GPU.
-Uses TartuNLP's Finno-Ugric NMT model with Fairseq.
+Uses TartuNLP's Tahetorn_9B model (Tower-Plus-9B-based) with Transformers.
 """
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -99,7 +99,7 @@ async def root():
     """Health check endpoint (kept for convenience)"""
     return {
         "status": "ok",
-        "service": "Sami Translation API",
+        "service": "Sami Translation API (Tahetorn_9B)",
         "cuda_available": torch.cuda.is_available(),
         "device": str(translation_service.device) if translation_service else "not initialized"
     }

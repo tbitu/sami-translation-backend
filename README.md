@@ -1,6 +1,8 @@
 # Sami Translation Backend
 
-FastAPI service exposing a TartuNLP-compatible translation API (Sami ↔ Finnish/Norwegian) using the Hugging Face model `tartuNLP/smugri3_14-finno-ugric-nmt` via Fairseq.
+FastAPI service exposing a TartuNLP-compatible translation API (Sami ↔ Finnish/Norwegian) using the Hugging Face model `tartuNLP/Tahetorn_9B` via Transformers.
+
+**Model**: TartuNLP Tahetorn_9B (based on Unbabel/Tower-Plus-9B, Gemma2 9B translation-specialized model)
 
 Primary usage is via **prebuilt Docker images in GHCR**.
 
@@ -74,27 +76,32 @@ Docs/OpenAPI are served under `/translation/*` and the app honors `X-Forwarded-P
 
 Model download + caching (recommended):
 
-- `HF_CACHE_DIR` (preferred) or `MODEL_CACHE_DIR` (legacy): persist HF downloads across restarts
+- `HF_CACHE_DIR` (preferred) or `MODEL_CACHE_DIR` (legacy): persist HF downloads across restarts (model is ~9GB)
 - Offline best-effort: `HF_HUB_OFFLINE=1` / `HF_LOCAL_FILES_ONLY=1` / `TRANSFORMERS_OFFLINE=1` (requires a populated cache)
 - Download tuning: `HF_MAX_WORKERS` (default 8), `HF_ETAG_TIMEOUT` seconds (default 30)
 
-Model file overrides (relative to snapshot allowed):
+Model precision:
 
-- `SENTENCEPIECE_MODEL`
-- `FIXED_DICTIONARY`
+- `MODEL_DTYPE=fp32` or `USE_FP32=1` for float32 precision (more stable, more VRAM - ~18GB)
+- Default: automatic (bfloat16/float16, ~9-10GB VRAM)
 
-Precision:
+Quantization (for resource-constrained deployments):
 
-- `MODEL_DTYPE=fp32` or `USE_FP32=1` (more stable, more VRAM)
+- `MODEL_QUANTIZATION=8bit` for 8-bit quantization (~5GB VRAM)
+- `MODEL_QUANTIZATION=4bit` for 4-bit quantization (~3GB VRAM, slower inference)
 
-`TEST_MODE=1` runs a lightweight mock translator (no HF/Fairseq, CPU-only) for quick wiring checks.
+`TEST_MODE=1` runs a lightweight mock translator (no HF/Transformers, CPU-only) for quick wiring checks.
 
 ## Notes for contributors (optional)
 
-- Use **one Uvicorn worker** in production so the multi‑GB model isn’t duplicated in memory.
-- The Docker image is based on an NVIDIA NGC PyTorch base and includes in-image Fairseq patches for Python 3.11 + NGC torch version strings; building from source may require access to `nvcr.io/nvidia/pytorch`.
+- Use **one Uvicorn worker** in production so the multi‑GB model (9GB) isn't duplicated in memory.
+- The Docker image is based on an NVIDIA NGC PyTorch base for consistent CUDA support across platforms (including Arm SBSA).
+- The model uses Tower-style prompting for translation: prompts are formatted as `"Translate the following {src_lang} source text to {tgt_lang}:\n{src_lang}: {text}\n{tgt_lang}: "` and generation is done via the transformers pipeline.
+- Translation quality is optimized for Sami languages based on TartuNLP fine-tuning of Tower-Plus-9B.
 ## License
 
 This software is licensed under the [MIT License](LICENSE).
 
-The neural machine translation model used by this software (`tartuNLP/smugri3_14-finno-ugric-nmt`) is developed by [TartuNLP](https://tartunlp.ai/) at the University of Tartu and is licensed under [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/). When using this software, appropriate attribution must be given to TartuNLP and the University of Tartu as required by the CC-BY-4.0 license.
+The neural machine translation model used by this software (`tartuNLP/Tahetorn_9B`, based on Unbabel/Tower-Plus-9B) is developed by [TartuNLP](https://tartunlp.ai/) at the University of Tartu and is licensed under [CC-BY-NC-SA-4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). When using this software, appropriate attribution must be given to TartuNLP and the University of Tartu as required by the CC-BY-NC-SA-4.0 license.
+
+The base model (Unbabel/Tower-Plus-9B) is licensed under CC-BY-NC-4.0.

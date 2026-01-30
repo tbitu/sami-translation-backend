@@ -31,8 +31,14 @@ if ! python -c "import torch" 2>/dev/null; then
     exit 1
 fi
 
+if ! python -c "import transformers" 2>/dev/null; then
+    echo "❌ Transformers not installed!"
+    echo "Please run: pip install -r requirements.txt"
+    exit 1
+fi
+
 if ! python -c "import fastapi" 2>/dev/null; then
-    echo "❌ Other dependencies not installed!"
+    echo "❌ FastAPI not installed!"
     echo "Please run: pip install -r requirements.txt"
     exit 1
 fi
