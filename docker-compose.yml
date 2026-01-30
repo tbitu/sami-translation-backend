@@ -1,13 +1,14 @@
 services:
   sami-translation-backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        # NVIDIA NGC PyTorch base (multi-arch GPU, includes Arm SBSA builds).
-        # Override if you want a different NGC tag.
-        BASE_IMAGE: ${BASE_IMAGE:-nvcr.io/nvidia/pytorch:25.12-py3}
-    image: sami-translation-backend:latest
+    # Use the prebuilt GHCR image (same as README docker run command)
+    image: ghcr.io/tbitu/sami-translation-backend:latest
+    
+    # Alternative: build from source (uncomment if developing locally)
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    #   args:
+    #     BASE_IMAGE: ${BASE_IMAGE:-nvcr.io/nvidia/pytorch:25.12-py3}
     ports:
       - "8000:8000"
     environment:
