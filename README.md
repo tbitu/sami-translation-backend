@@ -93,3 +93,8 @@ Precision:
 
 - Use **one Uvicorn worker** in production so the multi‑GB model isn’t duplicated in memory.
 - The Docker image is based on an NVIDIA NGC PyTorch base and includes in-image Fairseq patches for Python 3.11 + NGC torch version strings; building from source may require access to `nvcr.io/nvidia/pytorch`.
+## License
+
+This software is licensed under the [MIT License](LICENSE).
+
+The neural machine translation model used by this software (`tartuNLP/smugri3_14-finno-ugric-nmt`) is developed by [TartuNLP](https://tartunlp.ai/) at the University of Tartu and is licensed under [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/). When using this software, appropriate attribution must be given to TartuNLP and the University of Tartu as required by the CC-BY-4.0 license.
