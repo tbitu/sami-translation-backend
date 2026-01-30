@@ -12,7 +12,7 @@
 - **Translation approach**: Chat-based prompting, NOT encoder-decoder NMT
 - **Prompt format**: `"Translate the following {src_lang} source text to {tgt_lang}:\n{src_lang}: {text}\n{tgt_lang}: "`
 - Model generates translation autoregressively using transformers `pipeline("text-generation")`
-- Language codes (API: `sme`, `nor`, `fin`) mapped to human-readable names in prompts (`"Northern Sami"`, `"Norwegian Bokmål"`, etc.)
+- Language codes (API: `sme`, `nor`, `fin`) mapped to human-readable names in prompts (`"Northern Sami"`, `"Norwegian (Bokmål)"`, `"Finnish"`)
 
 ### Reverse proxy / prefixes
 - The app serves docs/OpenAPI under `/translation/*` and honors `X-Forwarded-Prefix` via middleware so `/translation/openapi.json` and `/translation/docs` work behind a path prefix (see [main.py](main.py)).

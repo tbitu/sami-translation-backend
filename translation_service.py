@@ -34,7 +34,7 @@ LANGUAGE_DISPLAY_NAMES: Dict[str, str] = {
     "sjd": "Kildin Sami",
     "sje": "Pite Sami",
     "sju": "Ume Sami",
-    "nor": "Norwegian Bokmål",
+    "nor": "Norwegian (Bokmål)",
     "fin": "Finnish",
 }
 
