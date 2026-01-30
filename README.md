@@ -6,6 +6,8 @@ FastAPI service exposing a TartuNLP-compatible translation API (Sami ↔ Finnish
 
 Primary usage is via **prebuilt Docker images in GHCR**.
 
+> **Note**: v0.2.0 was the last release using the previous model ([tartuNLP/smugri3_14-finno-ugric-nmt](https://huggingface.co/tartuNLP/smugri3_14-finno-ugric-nmt)). Current version uses Tahetorn_9B.
+
 ## Quickstart (GHCR + Docker, recommended)
 
 Pull the image:

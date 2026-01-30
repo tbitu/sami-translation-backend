@@ -40,3 +40,7 @@
 ### Repo conventions
 - Avoid importing heavy deps at module import time; Transformers + HF Hub are imported lazily inside `TranslationService.__init__` (keep this pattern when refactoring).
 - The model is large (9B parameters, ~9GB in fp16/bf16) - expect longer download times and higher VRAM usage than previous version.
+
+### Version history
+- **v1.0.0+**: Current version uses Tahetorn_9B via Transformers
+- **v0.2.0**: Last release using the previous model (tartuNLP/smugri3_14-finno-ugric-nmt)
