@@ -229,11 +229,12 @@ class TranslationService:
         # Generate translation using pipeline
         # do_sample=False for deterministic, greedy decoding (best for translation)
         # max_new_tokens=200 should be sufficient for most translations
+        # Note: Passing generation params explicitly (no generation_config) to avoid deprecation warnings
         outputs = self.pipeline(
             messages,
             max_new_tokens=200,
+            max_length=None,  # Disable max_length to avoid conflict with max_new_tokens
             do_sample=False,
-            temperature=None,  # Ignored when do_sample=False
             return_full_text=False,  # Only return generated text, not prompt
         )
 
