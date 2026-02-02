@@ -129,9 +129,10 @@ class TranslationService:
             torch_dtype = torch.float32
             logger.info("Using float32 (fp32) precision for inference")
         else:
-            # Let transformers choose bf16 or fp16 based on GPU capability
-            torch_dtype = "auto"
-            logger.info("Using auto dtype (bf16/fp16) for inference")
+            # Explicitly use bfloat16 (Gemma2 supports it natively)
+            # "auto" was defaulting to fp32, causing 2x memory usage
+            torch_dtype = torch.bfloat16
+            logger.info("Using bfloat16 (bf16) precision for inference")
 
         # Load tokenizer
         logger.info("Loading tokenizer...")
@@ -149,6 +150,14 @@ class TranslationService:
             "device_map": "auto",  # Automatic device placement
             "low_cpu_mem_usage": True,  # Reduce memory overhead during loading
         }
+        
+        # Try to use Flash Attention 2 for better memory efficiency if available
+        try:
+            import flash_attn
+            model_kwargs["attn_implementation"] = "flash_attention_2"
+            logger.info("Using Flash Attention 2 for memory-efficient attention")
+        except ImportError:
+            logger.info("Flash Attention 2 not available, using default attention")
 
         if load_in_8bit:
             model_kwargs["load_in_8bit"] = True
@@ -161,6 +170,17 @@ class TranslationService:
             self.model_name,
             **model_kwargs
         )
+        
+        # Log actual dtype and memory usage for debugging
+        if hasattr(self.model, 'dtype'):
+            logger.info(f"Model loaded with dtype: {self.model.dtype}")
+        first_param = next(self.model.parameters())
+        logger.info(f"First parameter dtype: {first_param.dtype}, device: {first_param.device}")
+        
+        # Calculate expected memory usage
+        param_count = sum(p.numel() for p in self.model.parameters())
+        param_size_bytes = sum(p.numel() * p.element_size() for p in self.model.parameters())
+        logger.info(f"Model parameters: {param_count/1e9:.2f}B ({param_size_bytes/1024**3:.2f} GB)")
 
         # Create pipeline for easier inference
         # NOTE: Do NOT specify device_map here - model is already placed on device
@@ -241,6 +261,8 @@ class TranslationService:
             # Memory optimizations
             use_cache=True,  # Enable KV cache for efficiency (cleared after each call)
             pad_token_id=self.tokenizer.pad_token_id,
+            num_beams=1,  # Greedy decoding (no beam search memory overhead)
+            batch_size=1,  # Process one at a time
         )
 
         # Extract the translation from the output
