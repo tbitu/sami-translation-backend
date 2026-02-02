@@ -33,9 +33,9 @@ docker run --rm -p 8000:8000 --gpus all \
 
 Then open:
 
-- Health: `GET http://localhost:8000/`
-- Swagger UI: `GET http://localhost:8000/translation/docs`
-- OpenAPI: `GET http://localhost:8000/translation/openapi.json`
+- Health: `GET http://localhost:8000/health`
+- Swagger UI: `GET http://localhost:8000/api/translation/docs`
+- OpenAPI: `GET http://localhost:8000/api/translation/openapi.json`
 
 Note: if the GHCR package is private, you’ll need `docker login ghcr.io`.
 
@@ -59,20 +59,28 @@ docker compose run --gpus all --service-ports sami-translation-backend
 
 Endpoints (TartuNLP-compatible):
 
-- `GET /translation` capabilities (language pairs)
-- `POST /translation` translate (`text` can be a string or list)
+- `GET /api/translation` capabilities (language pairs)
+- `POST /api/translation` translate (`text` can be a string or list)
 
 Example translate:
 
 ```bash
-curl -X POST http://localhost:8000/translation \
+curl -X POST http://localhost:8000/api/translation \
   -H "Content-Type: application/json" \
   -d '{"text":"Bures!","src":"sme","tgt":"nor"}'
 ```
 
 ## Reverse proxy / path prefixes
 
-Docs/OpenAPI are served under `/translation/*` and the app honors `X-Forwarded-Prefix` so it works behind a path prefix (e.g. `/api`).
+The app is configured with root path `/api/translation` and honors `X-Forwarded-Prefix` for dynamic proxy path detection. Configure your reverse proxy to pass requests to the app root:
+
+```apache
+<Location /api/translation>
+    ProxyPass http://localhost:8000
+    ProxyPassReverse http://localhost:8000
+    RequestHeader set X-Forwarded-Prefix "/api/translation"
+</Location>
+```
 
 ## Configuration (runtime)
 

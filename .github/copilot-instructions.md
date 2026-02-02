@@ -2,8 +2,8 @@
 
 ### Big picture
 - [main.py](main.py) runs a single-process FastAPI app exposing a TartuNLP-compatible API:
-  - `GET /translation/v2` returns capabilities (language pairs)
-  - `POST /translation/v2` translates (`text` can be a string or list)
+  - `GET /api/translation` returns capabilities (language pairs)
+  - `POST /api/translation` translates (`text` can be a string or list)
 - [translation_service.py](translation_service.py) owns *all* model lifecycle: Hugging Face snapshot download/cache, loading transformers `AutoModelForCausalLM` and `AutoTokenizer`, and translation via Tower-style prompting.
 - Deploy with **one Uvicorn worker** so the 9GB model isn't duplicated in memory (see [Dockerfile](Dockerfile) CMD and README).
 
@@ -15,7 +15,9 @@
 - Language codes (API: `sme`, `nor`, `fin`) mapped to human-readable names in prompts (`"Northern Sami"`, `"Norwegian (Bokmål)"`, `"Finnish"`)
 
 ### Reverse proxy / prefixes
-- The app serves docs/OpenAPI under `/translation/*` and honors `X-Forwarded-Prefix` via middleware so `/translation/openapi.json` and `/translation/docs` work behind a path prefix (see [main.py](main.py)).
+- The app is configured with `root_path="/api/translation"` and honors `X-Forwarded-Prefix` via middleware.
+- Docs/OpenAPI are at `/api/translation/docs` and `/api/translation/openapi.json`.
+- Apache config should proxy `/api/translation` to the app root (not `/api/translation` to `/translation`).
 
 ### Dev workflows (local)
 - Create/activate venv, install CUDA-enabled PyTorch **first**, then `pip install -r requirements.txt` (see [README.md](README.md) and [requirements.txt](requirements.txt)).
