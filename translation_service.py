@@ -147,6 +147,7 @@ class TranslationService:
             "cache_dir": hf_cache_dir,
             "local_files_only": hf_offline,
             "device_map": "auto",  # Automatic device placement
+            "low_cpu_mem_usage": True,  # Reduce memory overhead during loading
         }
 
         if load_in_8bit:
@@ -162,11 +163,12 @@ class TranslationService:
         )
 
         # Create pipeline for easier inference
+        # NOTE: Do NOT specify device_map here - model is already placed on device
+        # Specifying device_map twice can cause memory duplication
         self.pipeline = pipeline(
             "text-generation",
             model=self.model,
             tokenizer=self.tokenizer,
-            device_map="auto"
         )
         
         logger.info("✓ TartuNLP Tahetorn_9B translation model loaded successfully!")
@@ -236,6 +238,9 @@ class TranslationService:
             max_length=None,  # Disable max_length to avoid conflict with max_new_tokens
             do_sample=False,
             return_full_text=False,  # Only return generated text, not prompt
+            # Memory optimizations
+            use_cache=True,  # Enable KV cache for efficiency (cleared after each call)
+            pad_token_id=self.tokenizer.pad_token_id,
         )
 
         # Extract the translation from the output

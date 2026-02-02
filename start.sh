@@ -54,10 +54,9 @@ echo "🌐 Starting FastAPI server on http://localhost:8000"
 echo "Press Ctrl+C to stop"
 echo ""
 
-# Force model parameters to fp32 for inference (more numeric precision at the
-# cost of memory). Set either MODEL_DTYPE=fp32 or USE_FP32=1 in the env so the
-# application will convert parameters to float32 on load.
-export MODEL_DTYPE="fp32"
-export USE_FP32="1"
+# Use bf16/fp16 for efficient GPU memory usage (~9-10GB)
+# Uncomment below lines if you need fp32 precision (uses ~36GB):
+# export MODEL_DTYPE="fp32"
+# export USE_FP32="1"
 
 python main.py

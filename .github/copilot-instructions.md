@@ -29,6 +29,7 @@
 - Offline best-effort: `HF_HUB_OFFLINE=1` / `HF_LOCAL_FILES_ONLY=1` / `TRANSFORMERS_OFFLINE=1` uses an existing cached snapshot when `HF_CACHE_DIR` is set.
 - Quantization: `MODEL_QUANTIZATION=8bit` or `=4bit` for reduced VRAM (useful for resource-constrained deployments).
 - Language codes are **API-facing** (3-letter codes) and mapped to human-readable display names for prompts via `LANGUAGE_DISPLAY_NAMES`.
+- **Memory usage**: Expect ~9-12GB GPU RAM in bf16/fp16 (includes model + KV cache). If seeing much higher (30GB+), check that `device_map` isn't specified multiple times during loading.
 
 ### TEST_MODE
 - Setting `TEST_MODE=1` makes `TranslationService` a lightweight mock (no HF download, no Transformers import, CPU-only) and returns deterministic canned outputs for a few phrases.
