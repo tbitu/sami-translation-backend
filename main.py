@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel
+from starlette.requests import Request
 import torch
 from translation_service import TranslationService
 import logging
@@ -106,7 +107,7 @@ async def root():
 
 
 @app.get("/translation/openapi.json", include_in_schema=False)
-async def openapi_json(request):
+async def openapi_json(request: Request):
     """OpenAPI schema with a server URL that respects root_path/prefix."""
     schema = get_openapi(
         title=app.title,
@@ -127,7 +128,7 @@ async def openapi_json(request):
 
 
 @app.get("/translation/docs", include_in_schema=False)
-async def swagger_ui(request):
+async def swagger_ui(request: Request):
     root_path = request.scope.get("root_path", "") or ""
     return get_swagger_ui_html(
         openapi_url=f"{root_path}/translation/openapi.json",
@@ -136,7 +137,7 @@ async def swagger_ui(request):
 
 
 @app.get("/translation/redoc", include_in_schema=False)
-async def redoc_ui(request):
+async def redoc_ui(request: Request):
     root_path = request.scope.get("root_path", "") or ""
     return get_redoc_html(
         openapi_url=f"{root_path}/translation/openapi.json",
