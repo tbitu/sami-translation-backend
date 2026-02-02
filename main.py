@@ -25,7 +25,7 @@ app = FastAPI(
     openapi_url="/openapi.json",
     docs_url="/docs",
     redoc_url="/redoc",
-    root_path="/translation",  # Default root path when not behind a proxy
+    root_path="/api/translation",
 )
 
 
