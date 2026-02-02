@@ -59,13 +59,13 @@ docker compose run --gpus all --service-ports sami-translation-backend
 
 Endpoints (TartuNLP-compatible):
 
-- `GET /translation/v2` capabilities (language pairs)
-- `POST /translation/v2` translate (`text` can be a string or list)
+- `GET /translation` capabilities (language pairs)
+- `POST /translation` translate (`text` can be a string or list)
 
 Example translate:
 
 ```bash
-curl -X POST http://localhost:8000/translation/v2 \
+curl -X POST http://localhost:8000/translation \
   -H "Content-Type: application/json" \
   -d '{"text":"Bures!","src":"sme","tgt":"nor"}'
 ```

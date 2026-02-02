@@ -3,10 +3,8 @@ FastAPI server for TartuNLP Tahetorn_9B translation.
 Runs Sami ↔ Finnish/Norwegian translation models on NVIDIA GPU.
 Uses TartuNLP's Tahetorn_9B model (Tower-Plus-9B-based) with Transformers.
 """
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
-from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel
 import torch
 from translation_service import TranslationService
@@ -19,15 +17,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configure FastAPI.
-# We implement our own OpenAPI + docs routes under /translation/* so we can
-# correctly handle reverse-proxy prefixes (e.g. /api/translation/v2) via
-# ASGI root_path or X-Forwarded-Prefix.
+# Configure FastAPI with OpenAPI/docs under /translation/* prefix
 app = FastAPI(
     title="Translation API",
-    openapi_url=None,
-    docs_url=None,
-    redoc_url=None,
+    version="2.3.1",
+    description="An API that provides translations using neural machine translation models. Developed by TartuNLP - the NLP research group of the University of Tartu.",
+    openapi_url="/translation/openapi.json",
+    docs_url="/translation/docs",
+    redoc_url="/translation/redoc",
 )
 
 
@@ -105,48 +102,9 @@ async def root():
     }
 
 
-@app.get("/translation/openapi.json", include_in_schema=False)
-async def openapi_json(request: Request):
-    """OpenAPI schema with a server URL that respects root_path/prefix."""
-    schema = get_openapi(
-        title=app.title,
-        version="2.3.1",
-        description=(
-            "An API that provides translations using neural machine translation models. "
-            "Developed by TartuNLP - the NLP research group of the University of Tartu."
-        ),
-        routes=app.routes,
-    )
-
-    # When deployed behind a reverse proxy under a prefix (e.g. /api), ASGI
-    # root_path (or X-Forwarded-Prefix) should be set. OpenAPI clients then
-    # combine server.url + path, so set server.url to root_path.
-    root_path = request.scope.get("root_path", "") or ""
-    schema["servers"] = [{"url": root_path}]
-    return schema
-
-
-@app.get("/translation/docs", include_in_schema=False)
-async def swagger_ui(request: Request):
-    root_path = request.scope.get("root_path", "") or ""
-    return get_swagger_ui_html(
-        openapi_url=f"{root_path}/translation/openapi.json",
-        title=f"{app.title} - Swagger UI",
-    )
-
-
-@app.get("/translation/redoc", include_in_schema=False)
-async def redoc_ui(request: Request):
-    root_path = request.scope.get("root_path", "") or ""
-    return get_redoc_html(
-        openapi_url=f"{root_path}/translation/openapi.json",
-        title=f"{app.title} - ReDoc",
-    )
-
-
-# Provide the configuration endpoint under /translation/v2 to match TartuNLP API
-@app.get("/translation/v2", response_model=Config, tags=["v2"])
-async def get_config_v2(x_api_key: Optional[str] = None):
+# Provide the configuration endpoint under /translation to match TartuNLP API
+@app.get("/translation", response_model=Config, tags=["translation"])
+async def get_config(x_api_key: Optional[str] = None):
     """Get the configuration of available NMT models."""
     if not translation_service:
         raise HTTPException(status_code=503, detail="Translation service not initialized")
@@ -170,7 +128,7 @@ async def get_config_v2(x_api_key: Optional[str] = None):
     ]
     return Config(domains=domains)
 
-@app.post("/translation/v2", response_model=Response, tags=["v2"])
+@app.post("/translation", response_model=Response, tags=["translation"])
 async def translate(request: Request, x_api_key: Optional[str] = None, application: Optional[str] = None):
     """
     Translate text between Sami languages, Finnish, and Norwegian.
