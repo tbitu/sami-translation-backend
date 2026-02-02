@@ -15,6 +15,7 @@ RUN apt-get update \
         git \
         curl \
         ca-certificates \
+        ninja-build \
     && rm -rf /var/lib/apt/lists/*
 
 # IMPORTANT: For NVIDIA Arm platforms (e.g., GB10 / DX Spark), the CUDA-enabled
@@ -26,7 +27,9 @@ COPY requirements.txt /app/requirements.txt
 # Install requirements
 # Unlike the previous Fairseq-based setup, transformers installs cleanly without
 # any special handling or patches.
-RUN python -m pip install --no-cache-dir -r /app/requirements.txt
+# flash-attn compiles CUDA kernels during installation (takes several minutes)
+RUN python -m pip install --no-cache-dir packaging ninja && \
+    python -m pip install --no-cache-dir -r /app/requirements.txt
 
 # Sanity check: ensure we're still on a CUDA-enabled torch build.
 RUN python - <<"PY"

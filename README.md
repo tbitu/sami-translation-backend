@@ -37,8 +37,6 @@ Then open:
 - Swagger UI: `GET http://localhost:8000/api/translation/docs`
 - OpenAPI: `GET http://localhost:8000/api/translation/openapi.json`
 
-Note: if the GHCR package is private, you’ll need `docker login ghcr.io`.
-
 ## Docker Compose (recommended for services)
 
 This repo includes a compose file with a persistent HF cache volume.
@@ -99,6 +97,11 @@ Quantization (for resource-constrained deployments):
 
 - `MODEL_QUANTIZATION=8bit` for 8-bit quantization (~5GB VRAM)
 - `MODEL_QUANTIZATION=4bit` for 4-bit quantization (~3GB VRAM, slower inference)
+
+Memory optimization:
+
+- **Flash Attention 2** is included for memory-efficient attention computation (requires CUDA compute capability ≥8.0, automatic detection)
+- Reduces VRAM usage and improves inference speed on supported GPUs (Ampere/Ada/Hopper architectures)
 
 `TEST_MODE=1` runs a lightweight mock translator (no HF/Transformers, CPU-only) for quick wiring checks.
 

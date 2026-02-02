@@ -74,7 +74,7 @@ class TranslationService:
             return
 
         # Real model loading - import heavy deps lazily
-        from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+        from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline, GenerationConfig
 
         # Model name from HuggingFace - TartuNLP's Tahetorn_9B
         # Based on Unbabel/Tower-Plus-9B (Gemma2 9B translation-specialized)
@@ -248,20 +248,24 @@ class TranslationService:
         # Format as chat message for tokenizer's chat template
         messages = [{"role": "user", "content": prompt_text}]
 
-        # Generate translation using pipeline
+        # Generate translation using pipeline with explicit GenerationConfig
         # do_sample=False for deterministic, greedy decoding (best for translation)
         # max_new_tokens=200 should be sufficient for most translations
-        # Note: Passing generation params explicitly (no generation_config) to avoid deprecation warnings
+        from transformers import GenerationConfig
+        
+        generation_config = GenerationConfig(
+            max_new_tokens=200,
+            do_sample=False,
+            num_beams=1,  # Greedy decoding (no beam search memory overhead)
+            use_cache=True,  # Enable KV cache for efficiency
+            pad_token_id=self.tokenizer.pad_token_id,
+            eos_token_id=self.tokenizer.eos_token_id,
+        )
+        
         outputs = self.pipeline(
             messages,
-            max_new_tokens=200,
-            max_length=None,  # Disable max_length to avoid conflict with max_new_tokens
-            do_sample=False,
+            generation_config=generation_config,
             return_full_text=False,  # Only return generated text, not prompt
-            # Memory optimizations
-            use_cache=True,  # Enable KV cache for efficiency (cleared after each call)
-            pad_token_id=self.tokenizer.pad_token_id,
-            num_beams=1,  # Greedy decoding (no beam search memory overhead)
             batch_size=1,  # Process one at a time
         )
 
