@@ -88,11 +88,6 @@ Model download + caching (recommended):
 - Offline best-effort: `HF_HUB_OFFLINE=1` / `HF_LOCAL_FILES_ONLY=1` / `TRANSFORMERS_OFFLINE=1` (requires a populated cache)
 - Download tuning: `HF_MAX_WORKERS` (default 8), `HF_ETAG_TIMEOUT` seconds (default 30)
 
-Model precision:
-
-- `MODEL_DTYPE=fp32` or `USE_FP32=1` for float32 precision (more stable, more VRAM - ~18GB)
-- Default: automatic (bfloat16/float16, ~9-10GB VRAM)
-
 Quantization (for resource-constrained deployments):
 
 - `MODEL_QUANTIZATION=8bit` for 8-bit quantization (~5GB VRAM)
