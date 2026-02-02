@@ -17,14 +17,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configure FastAPI with OpenAPI/docs under /translation/* prefix
+# Configure FastAPI with relative OpenAPI/docs URLs (work with reverse proxy root_path)
 app = FastAPI(
     title="Translation API",
     version="2.3.1",
     description="An API that provides translations using neural machine translation models. Developed by TartuNLP - the NLP research group of the University of Tartu.",
-    openapi_url="/translation/openapi.json",
-    docs_url="/translation/docs",
-    redoc_url="/translation/redoc",
+    openapi_url="/openapi.json",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    root_path="/translation",  # Default root path when not behind a proxy
 )
 
 
@@ -91,9 +92,9 @@ class Config(BaseModel):
     xml_support: Optional[bool] = True
     domains: List[Domain]
 
-@app.get("/")
-async def root():
-    """Health check endpoint (kept for convenience)"""
+@app.get("/health")
+async def health():
+    """Health check endpoint"""
     return {
         "status": "ok",
         "service": "Sami Translation API (Tahetorn_9B)",
@@ -102,8 +103,8 @@ async def root():
     }
 
 
-# Provide the configuration endpoint under /translation to match TartuNLP API
-@app.get("/translation", response_model=Config, tags=["translation"])
+# Provide the configuration endpoint at root (works with root_path)
+@app.get("/", response_model=Config, tags=["translation"])
 async def get_config(x_api_key: Optional[str] = None):
     """Get the configuration of available NMT models."""
     if not translation_service:
@@ -128,7 +129,7 @@ async def get_config(x_api_key: Optional[str] = None):
     ]
     return Config(domains=domains)
 
-@app.post("/translation", response_model=Response, tags=["translation"])
+@app.post("/", response_model=Response, tags=["translation"])
 async def translate(request: Request, x_api_key: Optional[str] = None, application: Optional[str] = None):
     """
     Translate text between Sami languages, Finnish, and Norwegian.
