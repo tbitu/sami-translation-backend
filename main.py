@@ -1,6 +1,6 @@
 """
 FastAPI server for TartuNLP Tahetorn_9B translation.
-Runs Sami ↔ Finnish/Norwegian translation models on NVIDIA GPU.
+Runs Sami ↔ Finnish/Norwegian/English translation models on NVIDIA GPU.
 Uses TartuNLP's Tahetorn_9B model (Tower-Plus-9B-based) with Transformers.
 """
 from fastapi import FastAPI, HTTPException
@@ -132,7 +132,7 @@ async def get_config(x_api_key: Optional[str] = None):
 @app.post("/", response_model=Response, tags=["translation"])
 async def translate(request: Request, x_api_key: Optional[str] = None, application: Optional[str] = None):
     """
-    Translate text between Sami languages, Finnish, and Norwegian.
+    Translate text between Sami languages, Finnish, Norwegian, and English.
     Compatible with TartuNLP API format
     """
     if not translation_service:
