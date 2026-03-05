@@ -154,8 +154,6 @@ async def translate(request: Request, x_api_key: Optional[str] = None, applicati
 
     # Helper to translate a single string
     def _translate_str(s: str) -> str:
-        if request.src == request.tgt:
-            return s
         return translation_service.translate(text=s, src_lang=request.src, tgt_lang=request.tgt)
 
     try:

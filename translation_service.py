@@ -209,9 +209,6 @@ class TranslationService:
         Returns:
             Translated text
         """
-        if src_lang == tgt_lang:
-            return text
-        
         # Map API codes to human-readable names for prompts
         src_name = LANGUAGE_DISPLAY_NAMES.get(src_lang)
         tgt_name = LANGUAGE_DISPLAY_NAMES.get(tgt_lang)
