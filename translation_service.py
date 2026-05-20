@@ -1,6 +1,7 @@
 """
 Translation service using TartuNLP Tahetorn_9B model from HuggingFace.
-Supports bidirectional translation across Sami languages, Finnish, Norwegian, and English.
+Supports bidirectional translation across Sami languages and selected European languages
+including Finnish, Norwegian, English, Estonian, Latvian, Hungarian, and Russian.
 Uses Transformers library with Tower-style prompting for high-quality translation.
 
 Based on Unbabel/Tower-Plus-9B (Gemma2 9B translation-specialized model).
@@ -37,12 +38,16 @@ LANGUAGE_DISPLAY_NAMES: Dict[str, str] = {
     "nor": "Norwegian (Bokmål)",
     "fin": "Finnish",
     "eng": "English",
+    "est": "Estonian",
+    "lav": "Latvian",
+    "hun": "Hungarian",
+    "rus": "Russian",
 }
 
 
 class TranslationService:
     """
-    Manages translation models for Sami languages, Finnish, Norwegian, and English.
+    Manages translation models for Sami languages and supported European languages.
     Uses TartuNLP Tahetorn_9B (Tower-Plus-based) translation model.
     """
     
